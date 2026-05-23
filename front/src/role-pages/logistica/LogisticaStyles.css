@@ -1,0 +1,87 @@
+.logi-shell{padding:0}
+.logi-topNotice{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 14px;padding:12px 14px;border-radius:16px;background:rgba(248,250,252,0.85);border:1px solid rgba(148,163,184,0.22);box-shadow:var(--shadowSoft)}
+.logi-topNoticeLeft{display:flex;flex-direction:column;gap:6px}
+.logi-livePill{display:inline-flex;align-items:center;gap:8px;font-weight:1000;color:#fff;background:linear-gradient(135deg,rgba(249,115,22,1),rgba(30,41,59,0.95));padding:7px 10px;border-radius:999px;letter-spacing:0.4px;width:fit-content}
+.logi-liveDot{width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(249,115,22,0.18)}
+.logi-topNoticeText{font-weight:900;color:var(--text);font-size:13px}
+
+.logi-grid2{display:grid;grid-template-columns:1.25fr 0.75fr;gap:14px}
+.logi-bottomGrid{grid-template-columns:1.25fr 0.75fr}
+.logi-panel{border-radius:18px;background:rgba(255,255,255,0.86);border:1px solid rgba(148,163,184,0.28);box-shadow:var(--shadowSoft);padding:16px;overflow:hidden}
+.logi-panelHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+.logi-panelTitle{font-weight:1100;letter-spacing:-0.2px}
+.logi-panelSub{margin-top:4px;font-weight:800;font-size:12px;color:var(--muted);line-height:1.35}
+.logi-panelActions{display:flex;gap:10px;align-items:center}
+.logi-select{border-radius:14px;padding:10px 12px;border:1px solid rgba(148,163,184,0.30);background:rgba(248,250,252,0.8);font-weight:900;color:var(--text);outline:none}
+
+.logi-mapMock{position:relative;border-radius:16px;border:1px dashed rgba(249,115,22,0.35);background:linear-gradient(180deg,rgba(249,115,22,0.10),rgba(30,41,59,0.03));height:260px;overflow:hidden}
+.logi-mapGrid{position:absolute;inset:0;background-image:linear-gradient(rgba(30,41,59,0.08) 1px,transparent 1px),linear-gradient(90deg,rgba(30,41,59,0.08) 1px,transparent 1px);background-size:34px 34px;opacity:0.8}
+.logi-mapLegend{position:absolute;left:14px;top:12px;display:flex;flex-direction:column;gap:4px}
+.logi-mapLegendTitle{font-weight:1100;color:var(--text);font-size:13px}
+.logi-mapLegendMeta{font-weight:900;color:var(--muted);font-size:12px}
+.logi-mapDot{position:absolute;width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%);border:2px solid rgba(255,255,255,0.9);box-shadow:0 0 0 6px rgba(30,41,59,0.06)}
+.logi-mapDot.positive{background:var(--success)}
+.logi-mapDot.info{background:#3B82F6}
+.logi-mapDot.critical{background:var(--danger)}
+
+.logi-kpiRow{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+.logi-kpi{border-radius:16px;border:1px solid rgba(148,163,184,0.22);background:rgba(241,245,249,0.6);padding:12px}
+.logi-kpiLabel{font-weight:950;font-size:12px;color:var(--muted)}
+.logi-kpiValue{font-weight:1200;font-size:22px;margin-top:6px;color:var(--text)}
+.logi-kpiHint{font-weight:850;font-size:12px;color:var(--muted);margin-top:4px}
+
+.logi-alertList{display:flex;flex-direction:column;gap:10px}
+.logi-alertItem{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:16px;border:1px solid rgba(148,163,184,0.22);background:rgba(241,245,249,0.6)}
+.logi-alertIcon{width:28px;height:28px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:13px}
+.logi-alertIconDanger{background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.25);color:var(--danger)}
+.logi-alertIconWarning{background:rgba(249,115,22,0.10);border:1px solid rgba(249,115,22,0.25);color:var(--warning)}
+.logi-alertIconPositive{background:rgba(34,197,94,0.10);border:1px solid rgba(34,197,94,0.25);color:var(--success)}
+.logi-alertTitle{font-weight:1100}
+.logi-alertMeta{margin-top:3px;font-weight:850;color:var(--muted);font-size:12px}
+
+.logi-progressBlock{margin-top:14px}
+.logi-progressTop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.logi-progressTitle{font-weight:1100}
+.logi-progressSub{margin-top:4px;font-weight:850;font-size:12px;color:var(--muted)}
+.logi-progressValue{font-weight:1200;font-size:20px}
+.logi-progressTrack{height:12px;border-radius:999px;background:rgba(15,23,42,0.08);overflow:hidden;margin-top:10px}
+.logi-progressFill{height:100%;border-radius:999px}
+.logi-progressHint{margin-top:8px;font-weight:850;color:var(--muted);font-size:12px}
+
+.logi-tableWrap{overflow:auto;border-radius:16px;border:1px solid rgba(148,163,184,0.18);background:rgba(255,255,255,0.5)}
+.logi-table{width:100%;border-collapse:collapse;min-width:680px}
+.logi-table thead th{text-align:left;padding:12px 14px;font-weight:1100;font-size:12px;color:rgba(15,23,42,0.75);background:rgba(248,250,252,0.95);border-bottom:1px solid rgba(148,163,184,0.22)}
+.logi-table tbody td{padding:12px 14px;border-bottom:1px solid rgba(148,163,184,0.14);font-weight:850;color:rgba(15,23,42,0.9);font-size:13px}
+.logi-table tbody tr:hover{background:rgba(249,115,22,0.04)}
+.logi-tdStrong{font-weight:1200}
+.logi-tdMuted{color:var(--muted);font-weight:900}
+
+.logi-timeline{display:flex;flex-direction:column;gap:12px}
+.logi-tlItem{display:flex;gap:12px;align-items:flex-start}
+.logi-tlDot{width:12px;height:12px;border-radius:50%;margin-top:6px;box-shadow:0 0 0 6px rgba(30,41,59,0.06);border:2px solid rgba(255,255,255,0.9)}
+.logi-tlDot.positive{background:var(--success)}
+.logi-tlDot.info{background:#3B82F6}
+.logi-tlDot.critical{background:var(--danger)}
+.logi-tlContent{padding:10px 12px;border-radius:16px;border:1px solid rgba(148,163,184,0.22);background:rgba(241,245,249,0.6);flex:1}
+.logi-tlTitle{font-weight:1100}
+.logi-tlMeta{margin-top:4px;font-weight:850;color:var(--muted);font-size:12px}
+
+.logi-rowBtns{display:flex;gap:12px;margin-top:14px;flex-wrap:wrap}
+.logi-btn{border:none;cursor:pointer;padding:12px 14px;border-radius:14px;font-weight:1100;color:#fff;box-shadow:0 10px 24px rgba(249,115,22,0.18)}
+.logi-btnPrimary{background:linear-gradient(135deg,#F97316,rgba(30,41,59,0.95))}
+.logi-btnGhost{background:rgba(255,255,255,0.75);color:var(--text);border:1px solid rgba(148,163,184,0.28);box-shadow:none}
+.logi-btnGhost:hover{background:rgba(249,115,22,0.06)}
+
+.logi-badge{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;font-weight:1100;font-size:12px;border:1px solid transparent}
+.logi-badge-success{color:var(--success);background:rgba(34,197,94,0.10);border-color:rgba(34,197,94,0.25)}
+.logi-badge-danger{color:var(--danger);background:rgba(239,68,68,0.10);border-color:rgba(239,68,68,0.25)}
+.logi-badge-warning{color:var(--warning);background:rgba(249,115,22,0.10);border-color:rgba(249,115,22,0.25)}
+.logi-badge-neutral{color:rgba(15,23,42,0.78);background:rgba(148,163,184,0.12);border-color:rgba(148,163,184,0.25)}
+
+@media (max-width: 900px){
+  .logi-grid2{grid-template-columns:1fr}
+  .logi-bottomGrid{grid-template-columns:1fr}
+  .logi-kpiRow{grid-template-columns:1fr}
+  .logi-mapMock{height:220px}
+}
+
