@@ -1,23 +1,9 @@
-import React, { useCallback } from 'react'
-import RoleLayout from '../../components/layout/RoleLayout.jsx'
-import { Route, Routes } from 'react-router-dom'
+import React from 'react'
+import PremiumRoleLayout from '../../components/layout/PremiumRoleLayout.jsx'
+import { Link, Route, Routes, useNavigate } from 'react-router-dom'
 import './LogisticaStyles.css'
 
-
-
-
-
-
-
-
-function Proximos() {
-  return (
-    <div>
-      <h2 style={{ marginTop: 0 }}>Logística</h2>
-      <p>Eventos próximos y listas de preparación (solo lectura, mock).</p>
-    </div>
-  )
-}
+const API_BASE = 'http://localhost:4000'
 
 function Icon({ name }) {
   const common = {
@@ -87,7 +73,6 @@ function Badge({ variant, children }) {
     warning: 'logi-badge logi-badge-warning',
     neutral: 'logi-badge logi-badge-neutral'
   }[variant] || 'logi-badge logi-badge-neutral'
-
   return <span className={cls}>{children}</span>
 }
 
@@ -95,31 +80,7 @@ function ProgressBar({ value, color }) {
   const v = Math.max(0, Math.min(100, Number(value) || 0))
   return (
     <div className="logi-progressTrack">
-      <div
-        className="logi-progressFill"
-        style={{ width: `${v}%`, background: color }}
-      />
-    </div>
-  )
-}
-
-function MockMap({ markers }) {
-  return (
-    <div className="logi-mapMock" aria-label="Mapa en tiempo real (mock)">
-      <div className="logi-mapGrid" />
-      <div className="logi-mapLegend">
-        <div className="logi-mapLegendTitle">Mapa operativo</div>
-        <div className="logi-mapLegendMeta">Actualización en vivo (mock)</div>
-      </div>
-
-      {markers.map((m) => (
-        <div
-          key={m.id}
-          className={`logi-mapDot ${m.tone}`}
-          style={{ left: `${m.x}%`, top: `${m.y}%` }}
-          title={`${m.label} - ${m.status}`}
-        />
-      ))}
+      <div className="logi-progressFill" style={{ width: `${v}%`, background: color }} />
     </div>
   )
 }
@@ -129,7 +90,7 @@ function Timeline({ items }) {
     <div className="logi-timeline">
       {items.map((it, idx) => (
         <div key={idx} className="logi-tlItem">
-          <div className={`logi-tlDot ${it.tone}`} />
+          <div className={`logi-tlDot ${it.tone || 'info'}`} />
           <div className="logi-tlContent">
             <div className="logi-tlTitle">{it.title}</div>
             <div className="logi-tlMeta">{it.meta}</div>
@@ -140,111 +101,82 @@ function Timeline({ items }) {
   )
 }
 
-function useLiveLogisticsData() {
-  const API_BASE = 'http://localhost:4000'
+function useLogiApi() {
+  const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState('')
 
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState(null)
-
-  const [prepList, setPrepList] = React.useState([])
-
-  const fetchData = React.useCallback(async () => {
+  const request = React.useCallback(async (path, options = {}) => {
     setLoading(true)
-    setError(null)
-
+    setError('')
     try {
-      const res = await import('axios').then(({ default: axios }) =>
-        axios.get(`${API_BASE}/logistica/preparation-list`)
-      )
-      setPrepList(res?.data?.list || [])
+      const axios = (await import('axios')).default
+      const token = localStorage.getItem('token')
+      const res = await axios({
+        baseURL: API_BASE,
+        url: path,
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      })
+      return res.data
     } catch (e) {
-      // fallback mock si el endpoint no existe o falla
-      setError(String(e?.response?.data?.message || e?.message || e))
-      setPrepList([
-        { id: 'prep-1', eventId: 'ev-1', item: 'Sillas', qty: 50, status: 'Pendiente' },
-        { id: 'prep-2', eventId: 'ev-2', item: 'Mesas', qty: 12, status: 'En ruta' },
-        { id: 'prep-3', eventId: 'ev-3', item: 'Equipo audio', qty: 4, status: 'Incidencia' }
-      ])
+      const msg = String(e?.response?.data?.message || e?.message || 'Error de red')
+      setError(msg)
+      throw e
     } finally {
       setLoading(false)
     }
   }, [])
 
-  React.useEffect(() => {
-    fetchData()
+  return { request, loading, error, setError }
+}
 
-    const t = setInterval(() => {
-      fetchData()
-    }, 10000)
-
-    return () => clearInterval(t)
-  }, [fetchData])
-
-  return { loading, error, prepList }
+function Toast({ message }) {
+  if (!message) return null
+  return (
+    <div className="logi-topNotice" style={{ marginBottom: 10 }}>
+      <div className="logi-topNoticeText">{message}</div>
+    </div>
+  )
 }
 
 function DashboardLogistica() {
-  const { loading, error, prepList } = useLiveLogisticsData()
+  const nav = useNavigate()
+  const { request, loading, error } = useLogiApi()
+  const [dashboard, setDashboard] = React.useState(null)
 
-  const activeDeliveries = prepList.filter((p) =>
-    ['En ruta', 'Pendiente'].includes(p.status)
-  ).length
+  const load = React.useCallback(async () => {
+    const data = await request('/logistica/dashboard')
+    setDashboard(data)
+  }, [request])
 
-  const pendingOrders = prepList.filter((p) => p.status === 'Pendiente').length
+  React.useEffect(() => {
+    load().catch(() => {})
+    const t = setInterval(() => load().catch(() => {}), 10000)
+    return () => clearInterval(t)
+  }, [load])
 
-  const incidents = prepList.filter((p) => p.status === 'Incidencia').length
+  const kpis = dashboard?.kpis || {}
+  const alerts = dashboard?.alerts || []
 
-  const vehiclesAvailable = 6 // mock, reemplazable con endpoint real
-
-  const avgDeliveryMinutes = 42 // mock
-
-  const avgProgress = Math.round((avgDeliveryMinutes / 90) * 100)
-
-  const markers = React.useMemo(() => {
-    const base = [
-      { id: 'm1', label: 'Vehículo A', status: 'En ruta', tone: 'positive', x: 28, y: 38 },
-      { id: 'm2', label: 'Vehículo B', status: 'Pendiente', tone: 'info', x: 52, y: 56 },
-      { id: 'm3', label: 'Vehículo C', status: 'Incidencia', tone: 'critical', x: 70, y: 30 }
-    ]
-    return base
-  }, [])
-
-  const timelineItems = React.useMemo(() => {
-    const now = new Date()
-    const fmt = (d) => {
-      try {
-        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      } catch {
-        return String(d)
-      }
-    }
-
-    return [
-      { tone: 'critical', title: 'Incidencia registrada', meta: `Última actualización ${fmt(now)}` },
-      { tone: 'info', title: 'Asignación de conductores', meta: `Control de cola (mock) • ${fmt(new Date(now.getTime() - 1000 * 60 * 18))}` },
-      { tone: 'positive', title: 'Entregas en tránsito', meta: `Rutas monitorizadas (mock) • ${fmt(new Date(now.getTime() - 1000 * 60 * 42))}` }
-    ]
-  }, [])
+  const timelineItems = (dashboard?.livePanel || []).slice(0, 3).map((x) => ({
+    tone: x.status === 'retrasada' ? 'critical' : x.status === 'en curso' ? 'positive' : 'info',
+    title: `${x.code} · ${x.status}`,
+    meta: `${x.driver} · ${x.vehicle} · ETA ${x.etaMinutes} min`
+  }))
 
   return (
     <div className="logi-shell">
+      <Toast message={error ? `Error: ${error}` : ''} />
       <div className="logi-topNotice">
         <div className="logi-topNoticeLeft">
-          <div className="logi-livePill">
-            <span className="logi-liveDot" /> LIVE
-          </div>
-          <div className="logi-topNoticeText">
-            Operación, seguimiento y control logístico en tiempo real
-          </div>
+          <div className="logi-livePill"><span className="logi-liveDot" /> LIVE</div>
+          <div className="logi-topNoticeText">Operación, seguimiento y control logístico en tiempo real</div>
         </div>
         <div className="logi-topNoticeRight">
-          {loading ? (
-            <Badge variant="neutral">Sincronizando…</Badge>
-          ) : error ? (
-            <Badge variant="warning">Fallback activo</Badge>
-          ) : (
-            <Badge variant="success">OK</Badge>
-          )}
+          {loading ? <Badge variant="neutral">Sincronizando…</Badge> : <Badge variant="success">OK</Badge>}
         </div>
       </div>
 
@@ -252,35 +184,30 @@ function DashboardLogistica() {
         <div className="logi-panel">
           <div className="logi-panelHeader">
             <div>
-              <div className="logi-panelTitle">Mapa en tiempo real</div>
-              <div className="logi-panelSub">Rutas y estado de vehículos (mock visual)</div>
-            </div>
-            <div className="logi-panelActions">
-              <select className="logi-select" defaultValue="all">
-                <option value="all">Todas</option>
-                <option value="active">Activas</option>
-                <option value="incidents">Incidencias</option>
-              </select>
+              <div className="logi-panelTitle">KPIs dinámicos</div>
+              <div className="logi-panelSub">Datos operativos simulados en tiempo real</div>
             </div>
           </div>
-          <MockMap markers={markers} />
-
           <div className="logi-kpiRow">
-            <div className="logi-kpi">
-              <div className="logi-kpiLabel">Entregas activas</div>
-              <div className="logi-kpiValue">{activeDeliveries}</div>
-              <div className="logi-kpiHint">En curso / en cola</div>
-            </div>
-            <div className="logi-kpi">
-              <div className="logi-kpiLabel">Vehículos disponibles</div>
-              <div className="logi-kpiValue">{vehiclesAvailable}</div>
-              <div className="logi-kpiHint">Asignación dinámica</div>
-            </div>
-            <div className="logi-kpi">
+            <button className="logi-kpi" onClick={() => nav('/logistica/rutas')}>
+              <div className="logi-kpiLabel">Rutas activas</div>
+              <div className="logi-kpiValue">{kpis.rutas_activas ?? 0}</div>
+              <div className="logi-kpiHint">Ver gestión de rutas</div>
+            </button>
+            <button className="logi-kpi" onClick={() => nav('/logistica/seguimiento')}>
               <div className="logi-kpiLabel">Pedidos pendientes</div>
-              <div className="logi-kpiValue">{pendingOrders}</div>
-              <div className="logi-kpiHint">Preparación</div>
-            </div>
+              <div className="logi-kpiValue">{kpis.pedidos_pendientes ?? 0}</div>
+              <div className="logi-kpiHint">Ver seguimiento</div>
+            </button>
+            <button className="logi-kpi" onClick={() => nav('/logistica/inventario')}>
+              <div className="logi-kpiLabel">Inventario bajo</div>
+              <div className="logi-kpiValue">{kpis.inventario_bajo ?? 0}</div>
+              <div className="logi-kpiHint">Ver inventario</div>
+            </button>
+          </div>
+          <div className="logi-rowBtns">
+            <Link className="logi-btn logi-btnPrimary" to="/logistica/incidencias">Ir a incidencias</Link>
+            <Link className="logi-btn logi-btnGhost" to="/logistica/historial">Ver historial</Link>
           </div>
         </div>
 
@@ -288,49 +215,31 @@ function DashboardLogistica() {
           <div className="logi-panelHeader">
             <div>
               <div className="logi-panelTitle">Alertas logísticas</div>
-              <div className="logi-panelSub">Incidencias y control SLA</div>
-            </div>
-            <div>
-              <Badge variant="danger">{incidents} incidencias</Badge>
+              <div className="logi-panelSub">Panel LIVE funcional</div>
             </div>
           </div>
-
           <div className="logi-alertList">
-            <div className="logi-alertItem">
-              <div className="logi-alertIcon logi-alertIconDanger">●</div>
-              <div>
-                <div className="logi-alertTitle">Incidencias activas</div>
-                <div className="logi-alertMeta">Priorización roja para resolver</div>
+            {alerts.length === 0 ? (
+              <div className="logi-alertItem"><div className="logi-alertTitle">Sin alertas activas</div></div>
+            ) : alerts.map((a, i) => (
+              <div className="logi-alertItem" key={`${a.message}-${i}`}>
+                <div className={`logi-alertIcon ${a.level === 'danger' ? 'logi-alertIconDanger' : 'logi-alertIconWarning'}`}>●</div>
+                <div>
+                  <div className="logi-alertTitle">{a.message}</div>
+                  <div className="logi-alertMeta">Monitoreo dinámico</div>
+                </div>
               </div>
-            </div>
-
-            <div className="logi-alertItem">
-              <div className="logi-alertIcon logi-alertIconWarning">●</div>
-              <div>
-                <div className="logi-alertTitle">Riesgo de demora</div>
-                <div className="logi-alertMeta">Monitoreo continuo (mock)</div>
-              </div>
-            </div>
-
-            <div className="logi-alertItem">
-              <div className="logi-alertIcon logi-alertIconPositive">●</div>
-              <div>
-                <div className="logi-alertTitle">Operación estable</div>
-                <div className="logi-alertMeta">Flujo sin bloqueos (mock)</div>
-              </div>
-            </div>
+            ))}
           </div>
-
           <div className="logi-progressBlock">
             <div className="logi-progressTop">
               <div>
-                <div className="logi-progressTitle">Tiempo promedio de entrega</div>
-                <div className="logi-progressSub">Objetivo operativo: ≤ 60 min</div>
+                <div className="logi-progressTitle">Cumplimiento operativo</div>
+                <div className="logi-progressSub">Indicador de performance</div>
               </div>
-              <div className="logi-progressValue">{avgDeliveryMinutes} min</div>
+              <div className="logi-progressValue">{kpis.pedidos_entregados ?? 0}</div>
             </div>
-            <ProgressBar value={avgProgress} color="linear-gradient(90deg, #F97316, #22C55E)" />
-            <div className="logi-progressHint">Indicador visual de rendimiento</div>
+            <ProgressBar value={Math.min(100, (kpis.pedidos_entregados || 0) * 10)} color="linear-gradient(90deg, #F97316, #22C55E)" />
           </div>
         </div>
       </div>
@@ -339,85 +248,147 @@ function DashboardLogistica() {
         <div className="logi-panel">
           <div className="logi-panelHeader">
             <div>
-              <div className="logi-panelTitle">Tabla operativa</div>
-              <div className="logi-panelSub">Pedidos en seguimiento y asignación (datos del backend)</div>
-            </div>
-            <div className="logi-panelActions">
-              <button className="logi-btn logi-btnGhost" type="button">
-                Actualizar
-              </button>
+              <div className="logi-panelTitle">LIVE operacional</div>
+              <div className="logi-panelSub">Rutas monitoreadas en tiempo real</div>
             </div>
           </div>
-
           <div className="logi-tableWrap">
             <table className="logi-table">
-              <thead>
-                <tr>
-                  <th>Pedido</th>
-                  <th>Ítem</th>
-                  <th>Cantidad</th>
-                  <th>Estado</th>
-                  <th>Acción</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Ruta</th><th>Conductor</th><th>Vehículo</th><th>Estado</th><th>Acción</th></tr></thead>
               <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={5} className="logi-tdMuted">Cargando…</td>
+                {(dashboard?.livePanel || []).map((r) => (
+                  <tr key={r.id}>
+                    <td className="logi-tdStrong">{r.code}</td>
+                    <td>{r.driver}</td>
+                    <td>{r.vehicle}</td>
+                    <td><Badge variant={r.status === 'retrasada' ? 'danger' : r.status === 'en curso' ? 'success' : 'warning'}>{r.status}</Badge></td>
+                    <td><Link className="logi-btn logi-btnPrimary" to="/logistica/rutas">Ver seguimiento</Link></td>
                   </tr>
-                ) : prepList.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="logi-tdMuted">No hay pedidos para mostrar.</td>
-                  </tr>
-                ) : (
-                  prepList.map((p) => (
-                    <tr key={p.id}>
-                      <td className="logi-tdStrong">{p.eventId || p.id}</td>
-                      <td>{p.item}</td>
-                      <td>{p.qty}</td>
-                      <td>
-                        {p.status === 'Incidencia' ? (
-                          <Badge variant="danger">Incidencia</Badge>
-                        ) : p.status === 'En ruta' ? (
-                          <Badge variant="success">En ruta</Badge>
-                        ) : (
-                          <Badge variant="warning">Pendiente</Badge>
-                        )}
-                      </td>
-                      <td>
-                        <button className="logi-btn logi-btnPrimary" type="button">
-                          Ver
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         </div>
-
         <div className="logi-panel">
           <div className="logi-panelHeader">
-            <div>
-              <div className="logi-panelTitle">Timeline de entregas</div>
-              <div className="logi-panelSub">Historial operativo (mock + live)</div>
-            </div>
-            <div>
-              <Badge variant="neutral">Últimas 24h</Badge>
-            </div>
+            <div><div className="logi-panelTitle">Timeline de entregas</div><div className="logi-panelSub">Navegación a detalles</div></div>
           </div>
-
           <Timeline items={timelineItems} />
+        </div>
+      </div>
+    </div>
+  )
+}
 
-          <div className="logi-rowBtns">
-            <button className="logi-btn logi-btnPrimary" type="button">
-              Registrar incidencia
-            </button>
-            <button className="logi-btn logi-btnGhost" type="button">
-              Historial de operaciones
-            </button>
+function ModuleStub({ title, endpoint, columns }) {
+  const { request, loading, error } = useLogiApi()
+  const [rows, setRows] = React.useState([])
+  const [q, setQ] = React.useState('')
+
+  const load = React.useCallback(async () => {
+    const data = await request(`${endpoint}${q ? `?q=${encodeURIComponent(q)}` : ''}`)
+    setRows(data.items || [])
+  }, [request, endpoint, q])
+
+  React.useEffect(() => { load().catch(() => {}) }, [load])
+
+  return (
+    <div className="logi-shell">
+      <Toast message={error ? `Error: ${error}` : ''} />
+      <div className="logi-panel">
+        <div className="logi-panelHeader">
+          <div><div className="logi-panelTitle">{title}</div><div className="logi-panelSub">Módulo funcional conectado a API</div></div>
+          <div className="logi-panelActions">
+            <input className="logi-select" placeholder="Buscar..." value={q} onChange={(e) => setQ(e.target.value)} />
+            <button className="logi-btn logi-btnGhost" onClick={() => load().catch(() => {})}>Actualizar</button>
           </div>
+        </div>
+        <div className="logi-tableWrap">
+          <table className="logi-table">
+            <thead><tr>{columns.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
+            <tbody>
+              {loading ? <tr><td colSpan={columns.length}>Cargando…</td></tr> : rows.length === 0 ? <tr><td colSpan={columns.length}>Sin datos</td></tr> : rows.map((r) => (
+                <tr key={r.id || JSON.stringify(r)}>
+                  {columns.map((c) => <td key={c.key}>{String(r[c.key] ?? '-')}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InventarioView() {
+  const { request, loading, error } = useLogiApi()
+  const [rows, setRows] = React.useState([])
+  const [csvText, setCsvText] = React.useState('')
+  const [preview, setPreview] = React.useState(null)
+
+  const load = React.useCallback(async () => {
+    const data = await request('/logistica/inventory')
+    setRows(data.items || [])
+  }, [request])
+
+  React.useEffect(() => { load().catch(() => {}) }, [load])
+
+  const doPreview = async () => {
+    const p = await request('/logistica/inventory/import/preview', { method: 'POST', data: { csvText } })
+    setPreview(p)
+  }
+
+  const doImport = async () => {
+    if (!preview) return
+    const validRows = (preview.rows || []).filter((r) => r.valid).map((r) => r.row)
+    await request('/logistica/inventory/import/commit', { method: 'POST', data: { rows: validRows } })
+    setPreview(null)
+    setCsvText('')
+    load().catch(() => {})
+  }
+
+  return (
+    <div className="logi-shell">
+      <Toast message={error ? `Error: ${error}` : ''} />
+      <div className="logi-panel">
+        <div className="logi-panelHeader">
+          <div><div className="logi-panelTitle">Inventario</div><div className="logi-panelSub">CRUD + carga masiva CSV</div></div>
+          <div className="logi-panelActions">
+            <a className="logi-btn logi-btnGhost" href={`${API_BASE}/logistica/inventory/template.csv`} target="_blank" rel="noreferrer">Descargar plantilla CSV</a>
+            <button className="logi-btn logi-btnGhost" onClick={() => load().catch(() => {})}>Actualizar</button>
+          </div>
+        </div>
+
+        <div className="logi-panel" style={{ marginBottom: 12 }}>
+          <div className="logi-panelTitle">Importar CSV</div>
+          <div className="logi-panelSub" style={{ marginBottom: 8 }}>
+            Formato esperado (alineado a base de datos): <b>sku,nombre_producto,categoria,descripcion,stock,stock_minimo,precio,proveedor,ubicacion,estado</b>
+          </div>
+          <textarea
+            className="logi-select"
+            style={{ width: '100%', minHeight: 120 }}
+            placeholder={'Pega aquí contenido CSV...\nEjemplo:\nsku,nombre_producto,categoria,descripcion,stock,stock_minimo,precio,proveedor,ubicacion,estado\nSKU-001,Silla ergonómica,mobiliario,Silla para oficina,25,5,180.50,Proveedor Centro,Bodega A,activo'}
+            value={csvText}
+            onChange={(e) => setCsvText(e.target.value)}
+          />
+          <div className="logi-rowBtns">
+            <button className="logi-btn logi-btnPrimary" onClick={() => doPreview().catch(() => {})}>Validar vista previa</button>
+            <button className="logi-btn logi-btnGhost" disabled={!preview} onClick={() => doImport().catch(() => {})}>Importar válidos</button>
+          </div>
+          {preview ? <div className="logi-panelSub">Total: {preview.total} · Válidos: {preview.valid} · Errores: {preview.invalid}</div> : null}
+        </div>
+
+        <div className="logi-tableWrap">
+          <table className="logi-table">
+            <thead><tr><th>SKU</th><th>Producto</th><th>Categoría</th><th>Stock</th><th>Stock mínimo</th><th>Estado</th></tr></thead>
+            <tbody>
+              {loading ? <tr><td colSpan={6}>Cargando…</td></tr> : rows.length === 0 ? <tr><td colSpan={6}>Sin inventario</td></tr> : rows.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.sku}</td><td>{r.nombre_producto}</td><td>{r.categoria}</td><td>{r.stock}</td><td>{r.stock_minimo}</td><td>{r.estado}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -426,14 +397,13 @@ function DashboardLogistica() {
 
 export default function LogisticaLayout() {
   return (
-    <RoleLayout
+    <PremiumRoleLayout
       title="LOGÍSTICA"
       roleLabel="Operaciones en tiempo real"
       links={[
         { to: '/logistica', label: 'Dashboard' },
         { to: '/logistica/rutas', label: 'Gestión de rutas' },
         { to: '/logistica/seguimiento', label: 'Seguimiento de pedidos' },
-        { to: '/logistica/transportes', label: 'Transportes' },
         { to: '/logistica/inventario', label: 'Inventario' },
         { to: '/logistica/incidencias', label: 'Incidencias' },
         { to: '/logistica/historial', label: 'Historial' }
@@ -441,24 +411,12 @@ export default function LogisticaLayout() {
     >
       <Routes>
         <Route path="/" element={<DashboardLogistica />} />
-        <Route path="rutas" element={<DashboardLogistica />} />
-        <Route path="seguimiento" element={<DashboardLogistica />} />
-        <Route path="transportes" element={<DashboardLogistica />} />
-        <Route path="inventario" element={<DashboardLogistica />} />
-        <Route path="incidencias" element={<DashboardLogistica />} />
-        <Route path="historial" element={<DashboardLogistica />} />
+        <Route path="rutas" element={<ModuleStub title="Gestión de rutas" endpoint="/logistica/routes" columns={[{ key: 'code', label: 'Código' }, { key: 'origin', label: 'Origen' }, { key: 'destination', label: 'Destino' }, { key: 'status', label: 'Estado' }, { key: 'driver', label: 'Conductor' }, { key: 'vehicle', label: 'Vehículo' }]} />} />
+        <Route path="seguimiento" element={<ModuleStub title="Seguimiento de pedidos" endpoint="/logistica/orders" columns={[{ key: 'id', label: 'Pedido' }, { key: 'customerName', label: 'Cliente' }, { key: 'customerPhone', label: 'Teléfono' }, { key: 'status', label: 'Estado' }, { key: 'routeId', label: 'Ruta' }]} />} />
+        <Route path="inventario" element={<InventarioView />} />
+        <Route path="incidencias" element={<ModuleStub title="Incidencias" endpoint="/logistica/tickets" columns={[{ key: 'id', label: 'ID' }, { key: 'title', label: 'Título' }, { key: 'priority', label: 'Prioridad' }, { key: 'status', label: 'Estado' }, { key: 'assignedTo', label: 'Responsable' }]} />} />
+        <Route path="historial" element={<ModuleStub title="Historial" endpoint="/logistica/history" columns={[{ key: 'module', label: 'Módulo' }, { key: 'action', label: 'Acción' }, { key: 'user', label: 'Usuario' }, { key: 'details', label: 'Detalle' }, { key: 'at', label: 'Fecha' }]} />} />
       </Routes>
-    </RoleLayout>
+    </PremiumRoleLayout>
   )
 }
-
-
-export function LogisticaRoutes() {
-  return (
-    <Routes>
-      <Route path="/" element={<Proximos />} />
-    </Routes>
-  )
-}
-
-

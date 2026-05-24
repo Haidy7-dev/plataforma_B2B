@@ -9,8 +9,8 @@ const API_BASE = 'http://localhost:4000'
 export default function LoginPage() {
   const navigate = useNavigate()
   const { login, rolePath } = useAuth()
-  const [email, setEmail] = useState('admin@demo.com')
-  const [password, setPassword] = useState('123456')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -48,23 +48,8 @@ export default function LoginPage() {
 
             <h1 className={styles.title}>Accede a tu cuenta</h1>
             <p className={styles.subtitle}>
-              Controla inventario, reservas y operaciones desde un solo lugar. Seguro, rápido y con roles.
+              Inicia sesión para continuar de forma segura.
             </p>
-
-            <div className={styles.bullets}>
-              <div className={styles.bullet}>
-                <span className={styles.dot} />
-                <p>Acceso por rol (Super Admin, Admin, Logística, Gestor de Reservas)</p>
-              </div>
-              <div className={styles.bullet}>
-                <span className={styles.dot} />
-                <p>Sesiones con JWT y navegación protegida</p>
-              </div>
-              <div className={styles.bullet}>
-                <span className={styles.dot} />
-                <p>Interfaz clara para operaciones del día a día</p>
-              </div>
-            </div>
           </div>
         </section>
 
@@ -80,6 +65,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 type="email"
+                placeholder="Ejemplo: usuario@correo.com"
                 required
                 autoComplete="email"
               />
@@ -92,6 +78,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 type="password"
+                placeholder="Ingresa tu contraseña"
                 required
                 autoComplete="current-password"
               />

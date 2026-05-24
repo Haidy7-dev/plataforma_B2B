@@ -32,7 +32,28 @@ export function AuthProvider({ children }) {
 
       logout: () => {
         setUser(null)
-        localStorage.removeItem('token')
+
+        // Requested safe cleanup
+        const keys = [
+          'token',
+          'accessToken',
+          'userData',
+          'authStorage'
+        ]
+
+        keys.forEach((k) => {
+          try {
+            localStorage.removeItem(k)
+          } catch {
+            // ignore
+          }
+          try {
+            sessionStorage.removeItem(k)
+          } catch {
+            // ignore
+          }
+        })
+
         axios.defaults.headers.common.Authorization = ''
       },
 

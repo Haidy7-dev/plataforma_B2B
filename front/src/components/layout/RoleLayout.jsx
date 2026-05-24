@@ -1,5 +1,7 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
+import LogoutButton from '../auth/LogoutButton.jsx'
+
 
 const linkBaseStyle = {
   display: 'block',
@@ -42,28 +44,38 @@ export default function RoleLayout({
             style={{
               display: 'flex',
               alignItems: 'baseline',
+              justifyContent: 'space-between',
               gap: 12
             }}
           >
             <div
               style={{
-                color: 'var(--primary)',
-                fontWeight: 900,
-                fontSize: 18
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 12
               }}
             >
-              {title}
+              <div
+                style={{
+                  color: 'var(--primary)',
+                  fontWeight: 900,
+                  fontSize: 18
+                }}
+              >
+                {title}
+              </div>
+
+              <div
+                style={{
+                  color: 'var(--secondary)',
+                  fontWeight: 700
+                }}
+              >
+                {roleLabel}
+              </div>
             </div>
 
-            <div
-              style={{
-                color: 'var(--secondary)',
-                fontWeight: 700
-              }}
-            >
-              {roleLabel}
-            </div>
-
+            <LogoutButton compact />
           </div>
         </div>
       </header>

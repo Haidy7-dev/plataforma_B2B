@@ -1,19 +1,49 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
+import axios from 'axios'
+
+const API_BASE = 'http://localhost:4000'
+
+function formatDate(value) {
+  if (!value) return '-'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value).slice(0, 10)
+  return d.toLocaleDateString('es-CO')
+}
+
+function formatMoney(value) {
+  const n = Number(value || 0)
+  return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
+}
+
+function clsByStatus(status) {
+  const s = String(status || '').toUpperCase()
+  if (s === 'DEUDA') return 'sa-live-critical'
+  if (s === 'PARCIAL') return 'sa-live-info'
+  if (s === 'PAGADO' || s === 'FINALIZADO') return 'sa-live-positive'
+  return ''
+}
 
 export default function AdminActivity() {
-  const items = [
-    { id: 'a1', title: 'Usuario LOGISTICA creado', meta: 'Hace 10 min · id_empresa filtrado', tone: 'info' },
-    { id: 'a2', title: 'Solicitud pendiente revisada', meta: 'Hace 1 h · proceso interno', tone: 'neutral' },
-    { id: 'a3', title: 'Usuario desactivado', meta: 'Hace 3 h · acción administrativa', tone: 'critical' },
-    { id: 'a4', title: 'Tarea de operación completada', meta: 'Ayer · indicador mock verde', tone: 'positive' }
-  ]
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [rows, setRows] = useState([])
 
-  const clsByTone = {
-    positive: 'sa-live-positive',
-    critical: 'sa-live-critical',
-    info: 'sa-live-info',
-    neutral: ''
-  }
+  useEffect(() => {
+    async function load() {
+      try {
+        setLoading(true)
+        setError('')
+        const res = await axios.get(`${API_BASE}/admin/dashboard/stats`)
+        setRows(Array.isArray(res?.data?.recentReservations) ? res.data.recentReservations : [])
+      } catch (e) {
+        setError(String(e?.message || e))
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    load()
+  }, [])
 
   return (
     <div className="sa-content">
@@ -23,30 +53,36 @@ export default function AdminActivity() {
             <div className="sa-panelHeader">
               <div>
                 <div className="sa-panelTitle">Actividades recientes</div>
-                <div className="sa-panelSub">Registro operativo (mock). Conectar con tabla de auditoría si existe.</div>
+                <div className="sa-panelSub">Últimas reservas creadas.</div>
               </div>
-              <div className="sa-badge sa-badge-info">ADMIN · Empresa propia</div>
+              <div className="sa-badge sa-badge-info">ADMIN</div>
             </div>
 
-            <div className="sa-liveList">
-              {items.map((it) => (
-                <div key={it.id} className={`sa-liveItem ${clsByTone[it.tone] || ''}`}>
-                  <div className="sa-liveDot" />
-                  <div>
-                    <div className="sa-liveTitle">{it.title}</div>
-                    <div className="sa-liveMeta">{it.meta}</div>
+            {error ? <div style={{ color: 'var(--warning)', fontWeight: 800 }}>⚠ {error}</div> : null}
+            {loading ? <div className="sa-mutedBox">Cargando...</div> : null}
+
+            {!loading && !rows.length ? (
+              <div className="sa-mutedBox">Sin actividad reciente.</div>
+            ) : null}
+
+            {!loading && rows.length ? (
+              <div className="sa-liveList">
+                {rows.map((it) => (
+                  <div key={it.id_reserva} className={`sa-liveItem ${clsByStatus(it.estado)}`}>
+                    <div className="sa-liveDot" />
+                    <div>
+                      <div className="sa-liveTitle">{it.cliente || 'Cliente'}</div>
+                      <div className="sa-liveMeta">
+                        {formatDate(it.fecha)} · {formatMoney(it.total)} · {it.estado || '-'}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ marginTop: 14 }} className="sa-mutedBox">
-              Pendiente: paginación, filtros por tipo de actividad y exportación.
-            </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
     </div>
   )
 }
-

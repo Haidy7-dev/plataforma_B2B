@@ -38,11 +38,8 @@ function Modal({ open, title, subtitle, children, onClose, footer }) {
   )
 }
 
-const requiredHeaders = ['tipo', 'nombre', 'cantidad', 'espacio', 'estado', 'descripcion']
+const requiredHeaders = ['nombre', 'tipo', 'stock', 'precio', 'estado']
 
-function toCsvHeadersRow() {
-  return requiredHeaders.join(',')
-}
 
 function normalizeTipoForDisplay(v) {
   if (v == null) return ''
@@ -54,6 +51,7 @@ export default function InventoryImport() {
 
   const [fileName, setFileName] = useState('')
   const [rows, setRows] = useState([])
+  const [selectedFile, setSelectedFile] = useState(null)
   const [loading, setLoading] = useState(false)
 
   const [parseError, setParseError] = useState(null)
@@ -71,17 +69,33 @@ export default function InventoryImport() {
     return map
   }, [validation])
 
-  function downloadTemplate() {
-    const content = `${toCsvHeadersRow()}\n`
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'inventory_template.csv'
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
+  async function downloadTemplate() {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        setParseError('Sesión expirada o sin token. Inicia sesión nuevamente.')
+        return
+      }
+
+      setParseError(null)
+
+      const res = await axios.get(`${API_BASE}/admin/inventory/template`, {
+        responseType: 'blob',
+        headers: { Authorization: `Bearer ${token}` }
+      })
+
+      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8;' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'inventory_template.csv'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (e) {
+      setParseError(String(e?.response?.data?.message || e?.message || 'No se pudo descargar la plantilla CSV'))
+    }
   }
 
   function parseFile(file) {
@@ -110,6 +124,7 @@ export default function InventoryImport() {
 
         setRows(parsed)
         setFileName(file.name)
+        setSelectedFile(file)
       },
       error: (err) => setParseError(String(err))
     })
@@ -128,27 +143,25 @@ export default function InventoryImport() {
     setImportSummary(null)
 
     try {
-      const payloadRows = rows.map((r) => ({
-        tipo: r.tipo ?? r.TIPO,
-        nombre: r.nombre ?? r.NOMBRE,
-        cantidad: r.cantidad ?? r.CANTIDAD,
-        espacio: r.espacio ?? r.ESPACIO,
-        estado: r.estado ?? r.ESTADO,
-        descripcion: r.descripcion ?? r.DESCRIPCION
-      }))
+      const formData = new FormData()
+      formData.append('file', selectedFile)
 
-      const res = await axios.post(`${API_BASE}/admin/inventory/validate`, {
-        originalFilename: fileName || null,
-        rows: payloadRows
+      const token = localStorage.getItem('token')
+      const res = await axios.post(
+        `${API_BASE}/admin/inventory/validate`,
+        { rows },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+
+      setValidation({
+        ok: Boolean(res.data?.ok),
+        total: res.data?.total ?? 0,
+        validCount: res.data?.validCount ?? 0,
+        errorCount: res.data?.errorCount ?? 0,
+        errors: res.data?.errors || []
       })
 
-      setValidation(res.data)
-
-      if (!res.data.ok) {
-        // no abre confirm; el usuario corrige
-        return
-      }
-
+      if ((res.data?.errorCount ?? 0) > 0) return
       setConfirmOpen(true)
     } catch (e) {
       setParseError(String(e?.response?.data?.message || e?.message || e))
@@ -162,21 +175,18 @@ export default function InventoryImport() {
     setImportSummary(null)
 
     try {
-      const payloadRows = rows.map((r) => ({
-        tipo: r.tipo ?? r.TIPO,
-        nombre: r.nombre ?? r.NOMBRE,
-        cantidad: r.cantidad ?? r.CANTIDAD,
-        espacio: r.espacio ?? r.ESPACIO,
-        estado: r.estado ?? r.ESTADO,
-        descripcion: r.descripcion ?? r.DESCRIPCION
-      }))
+      const token = localStorage.getItem('token')
+      const res = await axios.post(
+        `${API_BASE}/admin/inventory/import`,
+        { originalFilename: fileName || null, rows },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
 
-      const res = await axios.post(`${API_BASE}/admin/inventory/import`, {
-        originalFilename: fileName || null,
-        rows: payloadRows
+      setImportSummary({
+        status: res.data?.status || (res.data?.ok ? 'SUCCESS' : 'ERROR'),
+        createdCount: res.data?.createdCount ?? 0,
+        updatedCount: res.data?.updatedCount ?? 0
       })
-
-      setImportSummary(res.data)
       setConfirmOpen(false)
 
       // limpiar validación para forzar re-subida si quiere otra
@@ -214,7 +224,7 @@ export default function InventoryImport() {
               <div>
                 <div className="sa-panelTitle">Importación masiva CSV (ADMIN)</div>
                 <div className="sa-panelSub">
-                  Vincula inventario automáticamente a tu <b>id_empresa</b>. Tipos: silla, mesa, espacio, salón, equipo y recurso logístico.
+                  Importa recursos CSV del módulo admin. Formato esperado por backend: nombre, tipo, stock, precio, estado.
                 </div>
               </div>
               <Badge variant="info">id_empresa: {user?.id_empresa ?? '-'}</Badge>
@@ -293,18 +303,17 @@ export default function InventoryImport() {
                     <thead>
                       <tr>
                         <th style={{ width: 90 }}>#</th>
-                        <th>Tipo</th>
                         <th>Nombre</th>
-                        <th style={{ width: 120 }}>Cantidad</th>
-                        <th>Espacio</th>
+                        <th>Tipo</th>
+                        <th style={{ width: 120 }}>Stock</th>
+                        <th style={{ width: 140 }}>Precio</th>
                         <th style={{ width: 120 }}>Estado</th>
-                        <th>Descripción</th>
                       </tr>
                     </thead>
                     <tbody>
                       {rows.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="sa-tdMuted">
+                          <td colSpan={6} className="sa-tdMuted">
                             No hay datos cargados.
                           </td>
                         </tr>
@@ -316,20 +325,17 @@ export default function InventoryImport() {
                             <tr key={rowNumber} style={err ? { background: 'rgba(239,68,68,0.08)' } : undefined}>
                               <td className="sa-tdMuted">{rowNumber}</td>
                               <td>
-                                <span style={{ fontWeight: 1000 }}>{normalizeTipoForDisplay(r.tipo)}</span>
+                                <span style={{ fontWeight: 1000 }}>{String(r.nombre ?? '')}</span>
                                 {err ? (
                                   <div style={{ color: 'var(--danger)', fontWeight: 900, fontSize: 11, marginTop: 4 }}>
                                     {err}
                                   </div>
                                 ) : null}
                               </td>
-                              <td className={err ? '' : 'sa-tdStrong'}>{String(r.nombre ?? '')}</td>
-                              <td>{String(r.cantidad ?? '')}</td>
-                              <td>{String(r.espacio ?? '')}</td>
-                              <td>
-                                {String(r.estado ?? '')}
-                              </td>
-                              <td style={{ color: 'var(--muted)' }}>{String(r.descripcion ?? '')}</td>
+                              <td className={err ? '' : 'sa-tdStrong'}>{normalizeTipoForDisplay(r.tipo)}</td>
+                              <td>{String(r.stock ?? '')}</td>
+                              <td>{String(r.precio ?? '')}</td>
+                              <td>{String(r.estado ?? '')}</td>
                             </tr>
                           )
                         })
@@ -361,6 +367,7 @@ export default function InventoryImport() {
                 onClick={() => {
                   setFileName('')
                   setRows([])
+                  setSelectedFile(null)
                   setValidation(null)
                   setImportSummary(null)
                   setParseError(null)
@@ -410,7 +417,7 @@ export default function InventoryImport() {
                 <div className="sa-finItem">
                   <div className="sa-finLabel">Válidas</div>
                   <div className="sa-finValue sa-finPositive">{validation?.validCount ?? 0}</div>
-                  <div className="sa-finHint">Se guardarán (crear/actualizar)</div>
+                  <div className="sa-finHint">Se guardarán en tabla recurso</div>
                 </div>
               </div>
               {validation?.errorCount ? (
@@ -423,7 +430,7 @@ export default function InventoryImport() {
                 </div>
               )}
               <div style={{ marginTop: 12 }} className="sa-mutedBox">
-                Al confirmar, el backend hará upsert por: <b>id_empresa + tipo + nombre + espacio + estado</b>.
+                Al confirmar, el backend insertará únicamente filas válidas en la tabla <b>recurso</b>.
               </div>
             </Modal>
           </div>
