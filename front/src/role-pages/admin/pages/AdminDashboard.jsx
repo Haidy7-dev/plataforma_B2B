@@ -170,35 +170,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div style={{ marginTop: 16 }}>
-              <div className="sa-panelTitle" style={{ marginBottom: 10 }}>Actividad reciente</div>
-              <div className="sa-tableWrap">
-                <table className="sa-table">
-                  <thead>
-                    <tr>
-                      <th>Cliente</th>
-                      <th>Fecha</th>
-                      <th>Total</th>
-                      <th>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(stats.recentReservations || []).length ? stats.recentReservations.map((row) => (
-                      <tr key={`rr-${row.id_reserva}`}>
-                        <td>{row.cliente || '-'}</td>
-                        <td>{formatDate(row.fecha)}</td>
-                        <td>{formatMoney(row.total)}</td>
-                        <td><span className={toneClassByFinancialStatus(row.estado)}>{row.estado || '-'}</span></td>
-                      </tr>
-                    )) : (
-                      <tr>
-                        <td colSpan={4}><div className="sa-mutedBox">Sin actividad reciente.</div></td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
           </div>
         </div>
       </div>

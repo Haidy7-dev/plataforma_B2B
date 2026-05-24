@@ -371,6 +371,134 @@ adminRouter.get('/dashboard/stats', async (req, res) => {
   }
 })
 
+adminRouter.get('/reports/summary', async (req, res) => {
+  const id_empresa = req.user?.id_empresa
+  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
+
+  const pool = getPool()
+  try {
+    const [incRows] = await pool.query(
+      'SELECT COUNT(*) AS total FROM incidente WHERE id_empresa = ?',
+      [Number(id_empresa)]
+    )
+
+    const [finRows] = await pool.query(
+      `SELECT
+          COALESCE(r.estado_financiero, 'PENDIENTE') AS estado_financiero,
+          COUNT(*) AS total
+       FROM reserva r
+       INNER JOIN espacio es ON es.id_espacio = r.id_espacio
+       WHERE es.id_empresa = ?
+       GROUP BY COALESCE(r.estado_financiero, 'PENDIENTE')`,
+      [Number(id_empresa)]
+    )
+
+    const [totRows] = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM reserva r
+       INNER JOIN espacio es ON es.id_espacio = r.id_espacio
+       WHERE es.id_empresa = ?`,
+      [Number(id_empresa)]
+    )
+
+    const [finEventsRows] = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM reserva r
+       INNER JOIN espacio es ON es.id_espacio = r.id_espacio
+       WHERE es.id_empresa = ? AND r.estado_evento = 'FINALIZADO'`,
+      [Number(id_empresa)]
+    )
+
+    const [unpaidRows] = await pool.query(
+      `SELECT
+          r.id_reserva,
+          COALESCE(c.nombre, 'Cliente') AS cliente,
+          COALESCE(es.nombre, '-') AS espacio,
+          r.fecha_evento,
+          r.hora_inicio,
+          r.hora_fin,
+          COALESCE(r.estado_evento, 'COTIZACION') AS estado_evento,
+          COALESCE(r.estado_financiero, 'PENDIENTE') AS estado_financiero,
+          COALESCE(r.total, 0) AS total
+       FROM reserva r
+       INNER JOIN espacio es ON es.id_espacio = r.id_espacio
+       LEFT JOIN cliente c ON c.id_cliente = r.id_cliente
+       WHERE es.id_empresa = ?
+         AND COALESCE(r.estado_financiero, 'PENDIENTE') IN ('PENDIENTE', 'DEUDA')
+       ORDER BY r.fecha_evento ASC, r.id_reserva ASC
+       LIMIT 20`,
+      [Number(id_empresa)]
+    )
+
+    const [upcomingRows] = await pool.query(
+      `SELECT
+          r.id_reserva,
+          COALESCE(c.nombre, 'Cliente') AS cliente,
+          COALESCE(es.nombre, '-') AS espacio,
+          r.fecha_evento,
+          r.hora_inicio,
+          r.hora_fin,
+          COALESCE(r.estado_evento, 'COTIZACION') AS estado_evento,
+          COALESCE(r.estado_financiero, 'PENDIENTE') AS estado_financiero,
+          COALESCE(r.total, 0) AS total
+       FROM reserva r
+       INNER JOIN espacio es ON es.id_espacio = r.id_espacio
+       LEFT JOIN cliente c ON c.id_cliente = r.id_cliente
+       WHERE es.id_empresa = ?
+       ORDER BY r.fecha_evento ASC, r.id_reserva ASC
+       LIMIT 20`,
+      [Number(id_empresa)]
+    )
+
+    const totalsByFinancial = {
+      PENDIENTE: 0,
+      PARCIAL: 0,
+      PAGADO: 0,
+      DEUDA: 0
+    }
+
+    ;(finRows || []).forEach((r) => {
+      const key = String(r.estado_financiero || '').toUpperCase()
+      if (totalsByFinancial[key] !== undefined) totalsByFinancial[key] = Number(r.total || 0)
+    })
+
+    const totalReservas = Number(totRows?.[0]?.total || 0)
+    const totalFinalizadas = Number(finEventsRows?.[0]?.total || 0)
+    const cumplimiento = totalReservas > 0 ? Math.round((totalFinalizadas / totalReservas) * 100) : 0
+
+    return res.json({
+      incidencias: Number(incRows?.[0]?.total || 0),
+      cumplimiento,
+      totalReservas,
+      financieros: totalsByFinancial,
+      unpaidReservations: (unpaidRows || []).map((r) => ({
+        id_reserva: r.id_reserva,
+        cliente: r.cliente,
+        espacio: r.espacio,
+        fecha_evento: r.fecha_evento,
+        hora_inicio: r.hora_inicio,
+        hora_fin: r.hora_fin,
+        estado_evento: r.estado_evento,
+        estado_financiero: r.estado_financiero,
+        total: Number(r.total || 0)
+      })),
+      upcomingEvents: (upcomingRows || []).map((r) => ({
+        id_reserva: r.id_reserva,
+        cliente: r.cliente,
+        espacio: r.espacio,
+        fecha_evento: r.fecha_evento,
+        hora_inicio: r.hora_inicio,
+        hora_fin: r.hora_fin,
+        estado_evento: r.estado_evento,
+        estado_financiero: r.estado_financiero,
+        total: Number(r.total || 0)
+      }))
+    })
+  } catch (e) {
+    return res.status(500).json({ message: 'Error cargando reportes', error: String(e?.message || e) })
+  }
+})
+
 adminRouter.get('/spaces', async (req, res) => {
   const id_empresa = req.user?.id_empresa
   if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })

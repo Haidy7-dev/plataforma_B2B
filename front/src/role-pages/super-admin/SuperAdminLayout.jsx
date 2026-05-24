@@ -1,15 +1,19 @@
-import React, { useMemo, useState } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import React, { useEffect, useMemo, useState } from 'react'
+import { Routes, Route, useNavigate } from 'react-router-dom'
+import axios from 'axios'
 import SuperAdminPremiumLayout from './SuperAdminPremiumLayout.jsx'
 import EmpresasUsuarios from './pages/EmpresasUsuarios.jsx'
+import SuperAdminEmpresas from './pages/SuperAdminEmpresas.jsx'
+
+const API_BASE = 'http://localhost:4000'
 
 function Badge({ kind, children }) {
   return <span className={`sa-badge sa-badge-${kind}`}>{children}</span>
 }
 
-function Card({ title, value, icon, hint, tone }) {
+function Card({ title, value, icon, hint, tone, onClick }) {
   return (
-    <div className={`sa-card sa-card-${tone || 'neutral'}`}>
+    <button type="button" className={`sa-card sa-card-${tone || 'neutral'}`} onClick={onClick} style={{ textAlign: 'left', cursor: 'pointer' }}>
       <div className="sa-cardTop">
         <div className="sa-cardTitle">{title}</div>
         <div className="sa-cardIcon" aria-hidden>
@@ -18,7 +22,7 @@ function Card({ title, value, icon, hint, tone }) {
       </div>
       <div className="sa-cardValue">{value}</div>
       {hint ? <div className="sa-cardHint">{hint}</div> : null}
-    </div>
+    </button>
   )
 }
 
@@ -55,119 +59,60 @@ function DataTable({ rows }) {
   )
 }
 
-function Modal({ open, title, children, onClose }) {
-  if (!open) return null
-  return (
-    <div className="sa-modalOverlay" role="dialog" aria-modal="true">
-      <div className="sa-modal">
-        <div className="sa-modalHeader">
-          <div>
-            <div className="sa-modalTitle">{title}</div>
-            <div className="sa-modalSub">Vista previa (datos mock)</div>
-          </div>
-          <button type="button" className="sa-modalClose" onClick={onClose} aria-label="Cerrar">
-            ✕
-          </button>
-        </div>
-        <div className="sa-modalBody">{children}</div>
-        <div className="sa-modalFooter">
-          <button type="button" className="sa-btn sa-btnGhost" onClick={onClose}>
-            Cancelar
-          </button>
-          <button type="button" className="sa-btn sa-btnPrimary" onClick={onClose}>
-            Guardar cambios
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function Dashboard() {
-  const [openModal, setOpenModal] = useState(false)
+  const navigate = useNavigate()
+  const [loading, setLoading] = useState(false)
+  const [q, setQ] = useState('')
+  const [rows, setRows] = useState([])
+  const [stats, setStats] = useState({
+    usuariosActivos: 0,
+    empresasRegistradas: 0,
+    alertasSistema: 0
+  })
 
-  const recent = useMemo(
-    () => [
-      {
-        id: 1,
-        actor: 'Sofía R.',
-        action: 'Creó administrador',
-        company: 'LogiNova',
-        role: 'Admin',
-        status: 'Aprobado',
-        statusKind: 'positive',
-        time: 'hace 12 min'
-      },
-      {
-        id: 2,
-        actor: 'Sistema',
-        action: 'Detección de riesgo',
-        company: 'Atlas Freight',
-        role: 'SuperAdmin',
-        status: 'Crítico',
-        statusKind: 'critical',
-        time: 'hace 38 min'
-      },
-      {
-        id: 3,
-        actor: 'Miguel P.',
-        action: 'Actualizó permisos',
-        company: 'TransWare',
-        role: 'Admin',
-        status: 'OK',
-        statusKind: 'neutral',
-        time: 'hace 2 h'
-      },
-      {
-        id: 4,
-        actor: 'Sistema',
-        action: 'Audit trail generado',
-        company: 'B2B Central',
-        role: 'SuperAdmin',
-        status: 'OK',
-        statusKind: 'neutral',
-        time: 'ayer'
+  useEffect(() => {
+    async function loadStats() {
+      setLoading(true)
+      try {
+        const token = localStorage.getItem('token')
+        const headers = token ? { Authorization: `Bearer ${token}` } : {}
+        const [statsRes, activityRes] = await Promise.all([
+          axios.get(`${API_BASE}/super-admin/dashboard/stats`, { headers }),
+          axios.get(`${API_BASE}/super-admin/activity/recent`, { headers })
+        ])
+
+        setStats({
+          usuariosActivos: Number(statsRes?.data?.usuariosActivos || 0),
+          empresasRegistradas: Number(statsRes?.data?.empresasRegistradas || 0),
+          alertasSistema: Number(statsRes?.data?.alertasSistema || 0)
+        })
+
+        const recent = (activityRes?.data?.rows || []).map((r) => ({
+          ...r,
+          statusKind: String(r?.status || '').toLowerCase().includes('crit') ? 'critical' : String(r?.status || '').toLowerCase().includes('ok') ? 'positive' : 'neutral'
+        }))
+
+        setRows(recent)
+      } finally {
+        setLoading(false)
       }
-    ],
-    []
-  )
+    }
+
+    loadStats()
+  }, [])
+
+  const filtered = useMemo(() => {
+    const needle = String(q || '').trim().toLowerCase()
+    if (!needle) return rows
+    return rows.filter((r) => `${r.actor} ${r.action} ${r.company} ${r.role} ${r.status}`.toLowerCase().includes(needle))
+  }, [rows, q])
 
   return (
     <div className="sa-stack">
       <section className="sa-grid4">
-        <Card
-          tone="primary"
-          title="Usuarios activos"
-          value="1,284"
-          hint="+3.1% vs semana anterior"
-          icon="👥"
-        />
-        <Card
-          tone="indigo"
-          title="Empresas registradas"
-          value="47"
-          hint="12 sedes nuevas"
-          icon="🏢"
-        />
-        <Card
-          tone="success"
-          title="Operaciones del día"
-          value="268"
-          hint="78% en SLA"
-          icon="⚡"
-        />
-        <div className="sa-card sa-card-critical">
-          <div className="sa-cardTop">
-            <div className="sa-cardTitle">Alertas del sistema</div>
-            <div className="sa-cardIcon" aria-hidden>
-              ⛔
-            </div>
-          </div>
-          <div className="sa-cardValue">3</div>
-          <div className="sa-cardHint">
-            1 crítico • 2 advertencias
-          </div>
-        </div>
+        <Card tone="primary" title="Usuarios activos" value={String(stats.usuariosActivos)} hint="Cantidad real en BD" icon="👥" onClick={() => navigate('/super-admin/usuarios')} />
+        <Card tone="indigo" title="Empresas registradas" value={String(stats.empresasRegistradas)} hint="Cantidad real en BD" icon="🏢" onClick={() => navigate('/super-admin/empresas')} />
+        <Card tone="critical" title="Alertas del sistema" value={String(stats.alertasSistema)} hint="Conteo real desde incidentes" icon="⛔" onClick={() => navigate('/super-admin/reportes')} />
       </section>
 
       <section className="sa-grid2 sa-grid2-full">
@@ -175,19 +120,18 @@ function Dashboard() {
           <div className="sa-panelHeader">
             <div>
               <div className="sa-panelTitle">Actividad reciente</div>
-              <div className="sa-panelSub">Eventos más recientes del sistema</div>
+              <div className="sa-panelSub">Eventos reales desde auditoría/logs</div>
             </div>
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar actividad..."
+              style={{ minWidth: 220, padding: 10, border: '1px solid #cbd5e1', borderRadius: 10, fontWeight: 700 }}
+            />
           </div>
-
-          <DataTable rows={recent} />
+          {loading ? <div className="sa-mutedBox">Cargando actividad...</div> : <DataTable rows={filtered} />}
         </div>
       </section>
-
-      <Modal open={openModal} title="Detalle financiero" onClose={() => setOpenModal(false)}>
-        <div className="sa-mutedBox">
-          Vista de detalle financiero disponible para integración real con datos de producción.
-        </div>
-      </Modal>
     </div>
   )
 }
@@ -195,35 +139,19 @@ function Dashboard() {
 export default function SuperAdminLayout() {
   return (
     <SuperAdminPremiumLayout
-      title="Dashboard avanzado"
+      title="Inicio"
       roleLabel="Super Admin"
       links={[
-        { to: '/super-admin', label: 'Dashboard', icon: 'bolt' },
+        { to: '/super-admin', label: 'Inicio', icon: 'bolt' },
         { to: '/super-admin/usuarios', label: 'Usuarios', icon: 'users' },
         { to: '/super-admin/empresas', label: 'Empresas', icon: 'store' }
       ]}
     >
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route
-          path="/usuarios"
-          element={
-            <div className="sa-stack">
-              <div className="sa-panel">
-                <div className="sa-panelHeader">
-                  <div>
-                    <div className="sa-panelTitle">Gestión total de usuarios</div>
-                    <div className="sa-panelSub">Crear/editar/eliminar administradores (mock)</div>
-                  </div>
-                </div>
-                <div className="sa-mutedBox">
-                  UI para CRUD de administradores + asignación de permisos/roles.
-                </div>
-              </div>
-            </div>
-          }
-        />
-        <Route path="/empresas" element={<EmpresasUsuarios />} />
+        <Route path="/usuarios" element={<EmpresasUsuarios />} />
+        <Route path="/empresas" element={<SuperAdminEmpresas />} />
+        <Route path="/reportes" element={<EmpresasUsuarios />} />
       </Routes>
     </SuperAdminPremiumLayout>
   )

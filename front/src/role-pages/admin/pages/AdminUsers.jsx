@@ -172,20 +172,6 @@ export default function AdminUsers() {
     }
   }
 
-  async function resetPassword(row) {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await axios.post(`${API_BASE}/admin/users/${row.id}/reset-password`)
-      const temp = res.data?.passwordTemporal
-      alert(`Contraseña temporal: ${temp || '(no retornada)'} `)
-      await fetchUsers()
-    } catch (e) {
-      setError(String(e?.response?.data?.message || e?.message || e))
-    } finally {
-      setLoading(false)
-    }
-  }
 
   return (
     <div className="sa-content">
@@ -275,9 +261,6 @@ export default function AdminUsers() {
                             >
                               {r.estado ? 'Desactivar' : 'Activar'}
                             </button>
-                            <button className="sa-btn sa-btnGhost" onClick={() => resetPassword(r)} disabled={loading}>
-                              Reset contraseña
-                            </button>
                           </div>
                         </td>
                       </tr>
@@ -366,7 +349,7 @@ export default function AdminUsers() {
                 </div>
               ) : (
                 <div style={{ gridColumn: '1 / -1' }} className="sa-mutedBox">
-                  En edición no se modifica la contraseña. Usa <b>Reset contraseña</b> en acciones rápidas.
+                  En edición no se modifica la contraseña desde esta vista.
                 </div>
               )}
             </div>

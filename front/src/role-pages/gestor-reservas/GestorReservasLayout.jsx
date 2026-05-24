@@ -189,10 +189,7 @@ export default function GestorReservasLayout() {
   }, [showFlow, location.pathname, token])
 
   const links = [
-    { to: '/gestor/crear-reservas', label: 'Crear reservas', icon: 'bolt' },
-    { to: '/gestor/cotizaciones', label: 'Generar cotizaciones', icon: 'store' },
-    { to: '/gestor/facturas', label: 'Generar facturas', icon: 'lock' },
-    { to: '/gestor/espacios-recursos', label: 'Seleccionar espacios y recursos', icon: 'shield' },
+    { to: '/gestor/crear-reservas', label: 'Inicio', icon: 'bolt' },
     { to: '/gestor/clientes', label: 'Gestionar clientes', icon: 'users' }
   ]
 
@@ -219,12 +216,19 @@ export default function GestorReservasLayout() {
   }
 
   function changeRecursoCantidad(nombre, cantidad) {
-    const qty = Math.max(1, Number(cantidad || 1))
+    const recursoBase = recursosDisponibles.find((r) => r.nombre === nombre)
+    const maxStock = Number(recursoBase?.stock || 1)
+    const qty = Math.min(maxStock, Math.max(1, Number(cantidad || 1)))
     changeField(
       'recursos',
       form.recursos.map((r) => (r.nombre === nombre ? { ...r, cantidad: qty } : r))
     )
   }
+
+  const totalCotizacion = useMemo(
+    () => form.recursos.reduce((acc, r) => acc + Number(r.precio || 0) * Number(r.cantidad || 0), 0),
+    [form.recursos]
+  )
 
   function canContinue(step) {
     if (step === 1) return form.cliente.trim().length > 2 && form.telefono.trim().length > 6
@@ -583,6 +587,7 @@ export default function GestorReservasLayout() {
                             <input
                               type="number"
                               min="1"
+                              max={recurso.stock}
                               className="input-form"
                               style={{ marginTop: 8 }}
                               value={activeItem.cantidad}
@@ -599,22 +604,15 @@ export default function GestorReservasLayout() {
               {currentStep === 6 && (
                 <div className="gestor-flowCard">
                   <h3>Generar cotización</h3>
-                  <input
-                    type="number"
-                    className="input-form"
-                    placeholder="Valor cotización (opcional)"
-                    value={form.cotizacion}
-                    onChange={(e) => changeField('cotizacion', e.target.value)}
-                  />
+                  <div className="sa-alert sa-alert-info" style={{ marginTop: 8 }}>
+                    Total automático por inventario seleccionado: <strong>${totalCotizacion}</strong>
+                  </div>
                   <input
                     className="input-form"
                     placeholder="Número factura (opcional)"
                     value={form.factura}
                     onChange={(e) => changeField('factura', e.target.value)}
                   />
-                  <div className="sa-alert sa-alert-info" style={{ marginTop: 8 }}>
-                    El total final se calcula automáticamente con base en los recursos seleccionados.
-                  </div>
                 </div>
               )}
 
@@ -628,7 +626,7 @@ export default function GestorReservasLayout() {
                     <div><strong>Fecha:</strong> {form.fecha}</div>
                     <div><strong>Horario:</strong> {form.horario}</div>
                     <div><strong>Recursos:</strong> {form.recursos.map((r) => `${r.nombre} x${r.cantidad}`).join(', ')}</div>
-                    <div><strong>Cotización:</strong> ${form.cotizacion || 'Auto'}</div>
+                    <div><strong>Cotización:</strong> ${totalCotizacion}</div>
                     <div><strong>Factura:</strong> {form.factura || 'N/A'}</div>
                     <div><strong>ID Cliente (BD):</strong> {form.idCliente}</div>
                     <div><strong>ID Espacio (BD):</strong> {form.idEspacio}</div>

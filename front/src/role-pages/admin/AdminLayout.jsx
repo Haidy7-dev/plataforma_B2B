@@ -6,7 +6,6 @@ import AdminDashboard from './pages/AdminDashboard.jsx'
 import AdminUsers from './pages/AdminUsers.jsx'
 import ReservationsFlow from './pages/ReservationsFlow.jsx'
 import AdminReports from './pages/AdminReports.jsx'
-import AdminActivity from './pages/AdminActivity.jsx'
 import InventoryImport from './pages/InventoryImport.jsx'
 
 export default function AdminLayout() {
@@ -15,12 +14,11 @@ export default function AdminLayout() {
       title="Plataforma ADMIN"
       roleLabel="Administrador"
       links={[
-        { to: '/admin', label: 'Dashboard' },
+        { to: '/admin', label: 'Inicio' },
         { to: '/admin/users', label: 'Gestión de usuarios' },
         { to: '/admin/reservas', label: 'Reservas' },
         { to: '/admin/reports', label: 'Reportes' },
-        { to: '/admin/inventario-csv', label: 'Inventario CSV' },
-        { to: '/admin/actividad', label: 'Actividades recientes' }
+        { to: '/admin/inventario-csv', label: 'Inventario CSV' }
       ]}
     >
       <Routes>
@@ -29,7 +27,6 @@ export default function AdminLayout() {
         <Route path="/reservas" element={<ReservationsFlow />} />
         <Route path="/reports" element={<AdminReports />} />
         <Route path="/inventario-csv" element={<InventoryImport />} />
-        <Route path="/actividad" element={<AdminActivity />} />
       </Routes>
     </PremiumRoleLayout>
   )

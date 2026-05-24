@@ -1,6 +1,6 @@
 import React from 'react'
 import PremiumRoleLayout from '../../components/layout/PremiumRoleLayout.jsx'
-import { Link, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 import './LogisticaStyles.css'
 
 const API_BASE = 'http://localhost:4000'
@@ -533,11 +533,7 @@ export default function LogisticaLayout() {
       title="LOGÍSTICA"
       roleLabel="Operaciones en tiempo real"
       links={[
-        { to: '/logistica', label: 'Dashboard' },
-        { to: '/logistica/seguimiento', label: 'Seguimiento de pedidos' },
-        { to: '/logistica/inventario', label: 'Inventario' },
-        { to: '/logistica/incidencias', label: 'Incidencias' },
-        { to: '/logistica/historial', label: 'Historial' }
+        { to: '/logistica', label: 'Inicio' }
       ]}
     >
       <Routes>

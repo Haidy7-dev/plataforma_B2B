@@ -7,6 +7,19 @@ function normalizeNit(value) {
   return nit || null
 }
 
+function normalizePhone(value) {
+  return String(value || '').trim()
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim())
+}
+
+function isValidPhone(value) {
+  const phone = normalizePhone(value)
+  return /^\d{7,}$/.test(phone)
+}
+
 function isDuplicateEntryError(err) {
   return err?.code === 'ER_DUP_ENTRY'
 }
@@ -156,34 +169,156 @@ superAdminCompaniesRouter.delete('/companies/:companyId', async (req, res) => {
   }
 })
 
+superAdminCompaniesRouter.get('/users/check-email', async (req, res) => {
+  const pool = getPool()
+  const correo = String(req.query?.correo || '').trim()
+  const excludeUserId = req.query?.excludeUserId ? Number(req.query.excludeUserId) : null
+
+  if (!correo) return res.status(400).json({ message: 'correo es requerido' })
+  if (!isValidEmail(correo)) return res.status(400).json({ message: 'Email inválido' })
+
+  try {
+    let query = 'SELECT id_usuario FROM usuario WHERE correo = ? LIMIT 1'
+    const params = [correo]
+
+    if (excludeUserId) {
+      query = 'SELECT id_usuario FROM usuario WHERE correo = ? AND id_usuario <> ? LIMIT 1'
+      params.push(excludeUserId)
+    }
+
+    const [rows] = await pool.query(query, params)
+    return res.json({ exists: Boolean(rows?.length), message: rows?.length ? 'correo ya existente' : 'ok' })
+  } catch (e) {
+    console.error('superAdminCompaniesRouter/checkEmail', e)
+    return res.status(500).json({ message: 'Error validando correo', error: String(e?.message || e) })
+  }
+})
+
 superAdminCompaniesRouter.post('/companies/:companyId/users', async (req, res) => {
   const pool = getPool()
   const payload = req.body || {}
   const { companyId } = req.params
-
   const { nombre, correo, telefono, password, estado } = payload
 
   if (!companyId) return res.status(400).json({ message: 'companyId es requerido' })
-  if (!correo || !password) return res.status(400).json({ message: 'correo y password son requeridos' })
+  if (!nombre || !correo || !password) return res.status(400).json({ message: 'nombre, correo y password son requeridos' })
+  if (!isValidEmail(correo)) return res.status(400).json({ message: 'Email inválido' })
+  if (!isValidPhone(telefono)) return res.status(400).json({ message: 'Teléfono inválido: solo números y mínimo 7 dígitos' })
 
   try {
-    // Nota: tu esquema de usuario no incluye telefono; se ignora si viene.
-    const userNombre = nombre || 'Admin de empresa'
+    const [existingEmail] = await pool.query('SELECT id_usuario FROM usuario WHERE correo = ? LIMIT 1', [correo])
+    if (existingEmail?.length) return res.status(409).json({ message: 'correo ya existente' })
 
     const hashed = await bcrypt.hash(String(password), 10)
 
     const [result] = await pool.query(
       'INSERT INTO usuario (nombre, correo, password, rol, estado, id_empresa) VALUES (?, ?, ?, ?, ?, ?)',
-      [userNombre, correo, hashed, 'ADMIN', estado ?? 1, Number(companyId)]
+      [nombre, correo, hashed, 'ADMIN', estado ?? 1, Number(companyId)]
     )
 
-    const [rows] = await pool.query('SELECT id_usuario AS id, nombre, correo, rol, estado, id_empresa FROM usuario WHERE id_usuario = ? LIMIT 1', [result.insertId])
+    const [rows] = await pool.query(
+      'SELECT id_usuario AS id, nombre, correo, rol, estado, id_empresa FROM usuario WHERE id_usuario = ? LIMIT 1',
+      [result.insertId]
+    )
 
-    return res.status(201).json({ user: rows?.[0] })
+    return res.status(201).json({ message: 'creado', user: rows?.[0] })
   } catch (e) {
-    console.error('superAdminCompaniesRouter/companyUsers', e)
-    // Podría fallar por unique correo
+    console.error('superAdminCompaniesRouter/companyUsers[POST]', e)
+    if (isDuplicateEntryError(e)) return res.status(409).json({ message: 'correo ya existente' })
     return res.status(500).json({ message: 'Error creando usuario admin', error: String(e?.message || e) })
+  }
+})
+
+superAdminCompaniesRouter.put('/companies/:companyId/users/:userId', async (req, res) => {
+  const pool = getPool()
+  const { companyId, userId } = req.params
+  const payload = req.body || {}
+  const { nombre, correo, telefono, estado } = payload
+
+  if (!companyId || !userId) return res.status(400).json({ message: 'companyId y userId son requeridos' })
+  if (!nombre || !correo) return res.status(400).json({ message: 'nombre y correo son requeridos' })
+  if (!isValidEmail(correo)) return res.status(400).json({ message: 'Email inválido' })
+  if (!isValidPhone(telefono)) return res.status(400).json({ message: 'Teléfono inválido: solo números y mínimo 7 dígitos' })
+
+  try {
+    const [existingUser] = await pool.query(
+      'SELECT id_usuario FROM usuario WHERE id_usuario = ? AND id_empresa = ? AND rol = ? LIMIT 1',
+      [Number(userId), Number(companyId), 'ADMIN']
+    )
+    if (!existingUser?.length) return res.status(404).json({ message: 'Administrador no encontrado' })
+
+    const [existingEmail] = await pool.query(
+      'SELECT id_usuario FROM usuario WHERE correo = ? AND id_usuario <> ? LIMIT 1',
+      [correo, Number(userId)]
+    )
+    if (existingEmail?.length) return res.status(409).json({ message: 'correo ya existente' })
+
+    await pool.query(
+      'UPDATE usuario SET nombre = ?, correo = ?, estado = ? WHERE id_usuario = ? AND id_empresa = ? AND rol = ?',
+      [nombre, correo, estado ?? 1, Number(userId), Number(companyId), 'ADMIN']
+    )
+
+    const [rows] = await pool.query(
+      'SELECT id_usuario AS id, nombre, correo, rol, estado, id_empresa FROM usuario WHERE id_usuario = ? LIMIT 1',
+      [Number(userId)]
+    )
+
+    return res.json({ message: 'actualizado', user: rows?.[0] })
+  } catch (e) {
+    console.error('superAdminCompaniesRouter/companyUsers[PUT]', e)
+    if (isDuplicateEntryError(e)) return res.status(409).json({ message: 'correo ya existente' })
+    return res.status(500).json({ message: 'Error actualizando admin', error: String(e?.message || e) })
+  }
+})
+
+superAdminCompaniesRouter.patch('/companies/:companyId/users/:userId/status', async (req, res) => {
+  const pool = getPool()
+  const { companyId, userId } = req.params
+  const { estado } = req.body || {}
+
+  if (!companyId || !userId) return res.status(400).json({ message: 'companyId y userId son requeridos' })
+
+  try {
+    const [existingUser] = await pool.query(
+      'SELECT id_usuario FROM usuario WHERE id_usuario = ? AND id_empresa = ? AND rol = ? LIMIT 1',
+      [Number(userId), Number(companyId), 'ADMIN']
+    )
+    if (!existingUser?.length) return res.status(404).json({ message: 'Administrador no encontrado' })
+
+    await pool.query(
+      'UPDATE usuario SET estado = ? WHERE id_usuario = ? AND id_empresa = ? AND rol = ?',
+      [Number(estado) === 1 ? 1 : 0, Number(userId), Number(companyId), 'ADMIN']
+    )
+
+    return res.json({ message: 'actualizado' })
+  } catch (e) {
+    console.error('superAdminCompaniesRouter/companyUsers[PATCH status]', e)
+    return res.status(500).json({ message: 'Error actualizando estado', error: String(e?.message || e) })
+  }
+})
+
+superAdminCompaniesRouter.delete('/companies/:companyId/users/:userId', async (req, res) => {
+  const pool = getPool()
+  const { companyId, userId } = req.params
+
+  if (!companyId || !userId) return res.status(400).json({ message: 'companyId y userId son requeridos' })
+
+  try {
+    const [existingUser] = await pool.query(
+      'SELECT id_usuario FROM usuario WHERE id_usuario = ? AND id_empresa = ? AND rol = ? LIMIT 1',
+      [Number(userId), Number(companyId), 'ADMIN']
+    )
+    if (!existingUser?.length) return res.status(404).json({ message: 'Administrador no encontrado' })
+
+    await pool.query(
+      'DELETE FROM usuario WHERE id_usuario = ? AND id_empresa = ? AND rol = ?',
+      [Number(userId), Number(companyId), 'ADMIN']
+    )
+
+    return res.json({ message: 'eliminado' })
+  } catch (e) {
+    console.error('superAdminCompaniesRouter/companyUsers[DELETE]', e)
+    return res.status(500).json({ message: 'Error eliminando admin', error: String(e?.message || e) })
   }
 })
 

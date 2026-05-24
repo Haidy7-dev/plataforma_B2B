@@ -42,7 +42,7 @@ function LogoutIcon() {
 }
 
 export default function LogoutButton({
-  confirm = true,
+  confirm = false,
   compact = false
 }) {
   const navigate = useNavigate()
@@ -143,114 +143,6 @@ export default function LogoutButton({
         {!compact ? 'Cerrar sesión' : null}
       </button>
 
-      {confirm && open && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(15,23,42,0.45)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 16,
-            zIndex: 9999
-          }}
-        >
-          <div
-            style={{
-              width: '100%',
-              maxWidth: 420,
-              background: 'white',
-              borderRadius: 16,
-              border: '1px solid #e2e8f0',
-              boxShadow: '0 20px 50px rgba(2,6,23,0.25)',
-              overflow: 'hidden'
-            }}
-          >
-            <div
-              style={{
-                padding: 16,
-                borderBottom: '1px solid #e2e8f0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12
-              }}
-            >
-              <div style={{ fontWeight: 900, color: '#0f172a' }}>
-                ¿Deseas cerrar sesión?
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Cerrar"
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  fontSize: 20,
-                  lineHeight: 1,
-                  color: '#64748b'
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            <div style={{ padding: 16, color: '#334155', fontWeight: 650 }}>
-              Se limpiarán los datos de sesión y se te redirigirá al login.
-            </div>
-
-            <div
-              style={{
-                padding: 16,
-                borderTop: '1px solid #e2e8f0',
-                display: 'flex',
-                gap: 12,
-                justifyContent: 'flex-end'
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 12,
-                  border: '1px solid #e2e8f0',
-                  background: 'white',
-                  color: '#0f172a',
-                  fontWeight: 800,
-                  cursor: 'pointer'
-                }}
-              >
-                Cancelar
-              </button>
-
-              <button
-                type="button"
-                onClick={doLogout}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 12,
-                  border: '1px solid rgba(220,38,38,0.35)',
-                  background: '#DC2626',
-                  color: 'white',
-                  fontWeight: 900,
-                  cursor: 'pointer',
-                  transition: 'background 140ms ease'
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#B91C1C')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = '#DC2626')}
-                disabled={busy}
-              >
-                {busy ? 'Cerrando...' : 'Cerrar sesión'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 }

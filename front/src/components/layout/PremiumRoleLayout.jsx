@@ -125,7 +125,7 @@ function toRoleLabel(role) {
 
   const map = {
     admin: 'Administrador',
-    'super-admin': 'Administrador',
+    'super-admin': 'Super-Admin',
     gestor: 'Gestor',
     logistica: 'Logística',
     cliente: 'Cliente',
