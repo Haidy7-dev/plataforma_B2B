@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import PremiumRoleLayout from '../../components/layout/PremiumRoleLayout.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
+
+const API_BASE = '/api/gestor'
 
 const espacios = [
   {
@@ -116,6 +118,15 @@ export default function GestorReservasLayout() {
   const navigate = useNavigate()
   const location = useLocation()
 
+  const [dashboard, setDashboard] = useState({
+    reservasActivas: 0,
+    eventosProximos: 0,
+    cotizacionesPendientes: 0,
+    eventosConfirmados: 0,
+    pagosPendientes: 0,
+    recientes: []
+  })
+
   const profileName = user?.name || user?.username || user?.fullname || 'Gestor'
   const empresa = user?.empresa || user?.company || 'Empresa principal'
   const [showFlow, setShowFlow] = useState(location.pathname.includes('/crear-reservas'))
@@ -153,6 +164,29 @@ export default function GestorReservasLayout() {
       return new Date().toDateString()
     }
   }, [])
+
+  useEffect(() => {
+    async function loadDashboard() {
+      try {
+        const res = await fetch(`${API_BASE}/dashboard`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) return
+
+        setDashboard({
+          reservasActivas: Number(data?.reservasActivas || 0),
+          eventosProximos: Number(data?.eventosProximos || 0),
+          cotizacionesPendientes: Number(data?.cotizacionesPendientes || 0),
+          eventosConfirmados: Number(data?.eventosConfirmados || 0),
+          pagosPendientes: Number(data?.pagosPendientes || 0),
+          recientes: Array.isArray(data?.recientes) ? data.recientes : []
+        })
+      } catch {}
+    }
+
+    if (!showFlow && location.pathname === '/gestor') loadDashboard()
+  }, [showFlow, location.pathname, token])
 
   const links = [
     { to: '/gestor/crear-reservas', label: 'Crear reservas', icon: 'bolt' },
@@ -272,12 +306,11 @@ export default function GestorReservasLayout() {
   }
 
   const kpis = [
-    { title: 'Reservas activas', value: '24', hint: '+4 esta semana', icon: '📌', tone: 'primary' },
-    { title: 'Eventos próximos', value: '12', hint: 'Próximos 7 días', icon: '🗓️', tone: 'info' },
-    { title: 'Cotizaciones pendientes', value: '8', hint: 'Requieren seguimiento', icon: '🧾', tone: 'warning' },
-    { title: 'Clientes registrados', value: '156', hint: 'Base activa', icon: '👥', tone: 'neutral' },
-    { title: 'Pagos pendientes', value: '$12.4M', hint: 'Cartera por cobrar', icon: '💳', tone: 'danger' },
-    { title: 'Eventos confirmados', value: '31', hint: 'Mes actual', icon: '✅', tone: 'success' }
+    { title: 'Reservas activas', value: String(dashboard.reservasActivas), hint: 'Desde BD real', icon: '📌', tone: 'primary' },
+    { title: 'Eventos próximos', value: String(dashboard.eventosProximos), hint: 'Por fecha_evento', icon: '🗓️', tone: 'info' },
+    { title: 'Cotizaciones pendientes', value: String(dashboard.cotizacionesPendientes), hint: 'estado_evento COTIZACION', icon: '🧾', tone: 'warning' },
+    { title: 'Eventos confirmados', value: String(dashboard.eventosConfirmados), hint: 'estado_evento CONFIRMADO', icon: '✅', tone: 'success' },
+    { title: 'Pagos pendientes', value: String(dashboard.pagosPendientes), hint: 'estado_financiero pendiente/parcial/deuda', icon: '💳', tone: 'danger' }
   ]
 
   return (
@@ -316,51 +349,31 @@ export default function GestorReservasLayout() {
               ))}
             </section>
 
-            <section className="sa-grid2">
-              <article className="sa-panel">
-                <div className="sa-panelHeader">
-                  <div>
-                    <div className="sa-panelTitle">Seleccionar espacios y recursos</div>
-                    <div className="sa-panelSub">Espacios disponibles para reservar</div>
-                  </div>
+            <section className="sa-panel">
+              <div className="sa-panelHeader">
+                <div>
+                  <div className="sa-panelTitle">Reservas recientes</div>
+                  <div className="sa-panelSub">Información real de reservas creadas</div>
                 </div>
+              </div>
 
-                <div className="gestor-availabilityGrid">
-                  {espacios.map((esp) => (
-                    <div key={esp.id} className="gestor-availabilityCard">
-                      <img src={esp.imagen} alt={esp.nombre} />
-                      <div className="gestor-availabilityBody">
-                        <div className="gestor-availabilityName">{esp.nombre}</div>
-                        <div className="gestor-availabilityMeta">
-                          {esp.tipo} · Capacidad {esp.capacidad}
-                        </div>
-                        <EstadoBadge estado={esp.estado} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </article>
-
-              <article className="sa-panel">
-                <div className="sa-panelHeader">
-                  <div>
-                    <div className="sa-panelTitle">Gestionar clientes</div>
-                    <div className="sa-panelSub">Clientes recientes y estado</div>
-                  </div>
-                </div>
-
-                <div className="gestor-clientList">
-                  {clientesRecientes.map((cl) => (
-                    <div key={cl.id} className="gestor-clientItem">
+              {(dashboard.recientes || []).length ? (
+                <div className="sa-liveList">
+                  {dashboard.recientes.slice(0, 8).map((r) => (
+                    <div key={r.id_reserva} className="sa-liveItem">
+                      <div className="sa-liveDot" />
                       <div>
-                        <div className="gestor-clientName">{cl.nombre}</div>
-                        <div className="gestor-clientMeta">Reservas: {cl.reservas} · {cl.contacto}</div>
+                        <div className="sa-liveTitle">{r.cliente || 'Cliente'} · {r.espacio || '-'}</div>
+                        <div className="sa-liveMeta">
+                          {String(r.fecha_evento || '').slice(0, 10)} · {r.estado_evento || '-'} · {r.estado_financiero || '-'}
+                        </div>
                       </div>
-                      <EstadoBadge estado={cl.estadoFinanciero} />
                     </div>
                   ))}
                 </div>
-              </article>
+              ) : (
+                <div className="sa-mutedBox">Sin reservas recientes.</div>
+              )}
             </section>
           </>
         )}

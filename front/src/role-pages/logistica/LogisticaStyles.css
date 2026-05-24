@@ -78,10 +78,56 @@
 .logi-badge-warning{color:var(--warning);background:rgba(249,115,22,0.10);border-color:rgba(249,115,22,0.25)}
 .logi-badge-neutral{color:rgba(15,23,42,0.78);background:rgba(148,163,184,0.12);border-color:rgba(148,163,184,0.25)}
 
+/* Dashboard minimalista logística */
+.logi-mainGrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.logi-inlineTabs{display:flex;gap:8px;flex-wrap:wrap}
+.logi-miniTab{border:1px solid rgba(148,163,184,0.28);background:rgba(255,255,255,0.82);border-radius:12px;padding:8px 10px;font-weight:900;color:var(--text);cursor:pointer}
+.logi-miniTab.isActive{background:rgba(249,115,22,0.12);border-color:rgba(249,115,22,0.35);color:#9A3412}
+.logi-checklist{display:flex;flex-direction:column;gap:10px}
+.logi-checkItem{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border:1px solid rgba(148,163,184,0.2);border-radius:14px;background:rgba(248,250,252,0.75)}
+.logi-checkLeft{display:flex;align-items:center;gap:10px}
+.logi-checkTitle{font-weight:1000}
+.logi-checkMeta{font-size:12px;color:var(--muted);font-weight:800}
+.logi-checkRight{display:flex;align-items:center;gap:10px}
+.logi-qtyInput{width:84px;border-radius:10px;border:1px solid rgba(148,163,184,0.35);background:#fff;padding:8px 10px;font-weight:900;color:var(--text)}
+.logi-historyList{display:flex;flex-direction:column;gap:10px}
+.logi-historyCard{border:1px solid rgba(148,163,184,0.2);border-radius:14px;padding:12px;background:rgba(248,250,252,0.72)}
+.logi-historyHead{display:flex;justify-content:space-between;gap:8px;font-weight:950;font-size:12px;color:var(--muted);margin-bottom:8px}
+.logi-historyCard ul{margin:0;padding-left:18px}
+.logi-historyCard li{font-weight:850;margin:4px 0}
+.logi-emptyState{padding:14px;border-radius:12px;border:1px dashed rgba(148,163,184,0.38);background:rgba(248,250,252,0.7);font-weight:850;color:var(--muted)}
+.logi-reservationList{display:flex;flex-direction:column;gap:10px}
+.logi-resCard{padding:12px;border-radius:14px;border:1px solid rgba(148,163,184,0.22);background:rgba(248,250,252,0.75)}
+.logi-resTop{display:flex;justify-content:space-between;gap:8px}
+.logi-resTitle{font-weight:1000}
+.logi-resMeta{font-size:12px;color:var(--muted);font-weight:850;margin-top:4px}
+.logi-countdown{margin-top:8px;font-weight:900;color:#9A3412;background:rgba(249,115,22,0.12);padding:8px 10px;border-radius:10px}
+.logi-resActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.logi-eventsPanel{margin-top:14px}
+.logi-eventList{display:flex;flex-direction:column;gap:10px}
+.logi-eventItem{display:flex;gap:10px;align-items:flex-start}
+.logi-eventLine{display:flex;flex-direction:column;align-items:center;min-width:16px}
+.logi-eventDot{width:10px;height:10px;border-radius:50%;background:#F97316;box-shadow:0 0 0 4px rgba(249,115,22,0.15)}
+.logi-eventConnector{width:2px;height:28px;background:rgba(148,163,184,0.45);margin-top:3px}
+.logi-eventContent{flex:1;padding:10px 12px;border-radius:12px;background:rgba(248,250,252,0.78);border:1px solid rgba(148,163,184,0.2)}
+.logi-eventTitle{font-weight:1000}
+.logi-eventMeta{margin-top:4px;font-size:12px;color:var(--muted);font-weight:850}
+
+/* Seguimiento de pedidos -> Eventos próximos y materiales */
+.logi-materialsList{display:flex;flex-direction:column;gap:6px}
+.logi-materialItem{display:flex;align-items:center;gap:8px;font-weight:850;color:var(--text)}
+.logi-materialItem input{width:14px;height:14px}
+.logi-actionsCol{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.logi-inlineActions{display:flex;gap:8px;flex-wrap:wrap}
+.logi-emptyStateCenter{padding:28px 16px;text-align:center;font-weight:900;color:var(--muted);border:1px dashed rgba(148,163,184,0.35);border-radius:14px;background:rgba(248,250,252,0.7)}
+
 @media (max-width: 900px){
   .logi-grid2{grid-template-columns:1fr}
   .logi-bottomGrid{grid-template-columns:1fr}
   .logi-kpiRow{grid-template-columns:1fr}
   .logi-mapMock{height:220px}
+  .logi-mainGrid{grid-template-columns:1fr}
+  .logi-checkItem{flex-direction:column;align-items:flex-start}
+  .logi-checkRight{width:100%;justify-content:space-between}
 }
 
