@@ -376,23 +376,53 @@ reservationsRouter.get('/spaces', async (req, res) => {
 
   try {
     const terms = [Number(id_empresa)]
-    let where = 'WHERE id_empresa = ?'
+    let where = `
+      WHERE u.id_empresa = ?
+        AND LOWER(u.rol) = 'admin'
+    `
     if (search) {
-      where += ' AND nombre LIKE ?'
+      where += ' AND e.nombre LIKE ?'
       terms.push(`%${search}%`)
     }
 
     const [rows] = await pool.query(
-      `SELECT id_espacio AS id, nombre, capacidad, precio, estado, id_empresa, imagen
-       FROM espacio
+      `SELECT
+          e.id_espacio AS id,
+          e.nombre,
+          e.capacidad,
+          e.precio,
+          e.estado,
+          e.id_empresa,
+          e.imagen
+       FROM espacio e
+       INNER JOIN usuario u ON u.id_usuario = e.id_usuario
        ${where}
-       ORDER BY id_espacio DESC`,
+       ORDER BY e.id_espacio DESC`,
       terms
     )
 
     return res.json({ spaces: rows || [] })
   } catch (e) {
-    return res.status(500).json({ message: 'Error listando espacios', error: String(e?.message || e) })
+    try {
+      const terms = [Number(id_empresa)]
+      let where = 'WHERE id_empresa = ?'
+      if (search) {
+        where += ' AND nombre LIKE ?'
+        terms.push(`%${search}%`)
+      }
+
+      const [rows] = await pool.query(
+        `SELECT id_espacio AS id, nombre, capacidad, precio, estado, id_empresa, imagen
+         FROM espacio
+         ${where}
+         ORDER BY id_espacio DESC`,
+        terms
+      )
+
+      return res.json({ spaces: rows || [] })
+    } catch (fallbackError) {
+      return res.status(500).json({ message: 'Error listando espacios', error: String(fallbackError?.message || fallbackError) })
+    }
   }
 })
 

@@ -17,7 +17,6 @@ export default function AdminLayout() {
       links={[
         { to: '/admin', label: 'Inicio' },
         { to: '/admin/users', label: 'Gestión de usuarios' },
-        { to: '/admin/reservas', label: 'Reservas' },
         { to: '/admin/reports', label: 'Reportes' },
         { to: '/admin/espacios', label: 'Espacios' },
         { to: '/admin/inventario-csv', label: 'Inventario CSV' }

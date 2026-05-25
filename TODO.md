@@ -1,11 +1,6 @@
-# TODO - Ajustes sección "Gestionar clientes" (Gestor)
+# TODO - Corrección flujo reservas Gestor
 
-- [ ] Revisar y preparar estado para clientes en `GestorReservasLayout.jsx`.
-- [ ] Implementar carga de clientes desde `/api/gestor/clients` con token.
-- [ ] Dejar en la parte superior de "Gestionar clientes" solo el botón **Crear cliente**.
-- [ ] Implementar modal/form para crear/editar cliente con campos: nombre, teléfono, correo.
-- [ ] Mostrar tarjetas de clientes con: nombre, teléfono, cantidad de reservas y estado financiero.
-- [ ] Agregar botones **editar** y **eliminar** junto al nombre en cada tarjeta.
-- [ ] Mostrar estado financiero exactamente como: PAGADO, DEUDA, PENDIENTE (+ faltante), SIN RESERVAS.
-- [ ] Mantener diseño actual y responsive reutilizando clases/componentes existentes.
-- [ ] Actualizar TODO marcando tareas completadas.
+- [x] Ajustar `GET /api/gestor/spaces` en `back/src/routes/reservations.js` para filtrar espacios creados por admins de la misma empresa del gestor.
+- [x] Mantener búsqueda por `search` y forma de respuesta actual.
+- [x] Incluir fallback seguro si no existe relación `espacio.id_usuario`.
+- [x] Verificar consistencia del endpoint para no afectar el frontend actual.

@@ -429,9 +429,7 @@ export default function GestorReservasLayout() {
                 <div className="sa-panelTitle">Nuevo flujo inteligente de reserva</div>
                 <div className="sa-panelSub">Creación guiada en 7 pasos con validación visual</div>
               </div>
-              <button type="button" className="sa-btn sa-btnGhost" onClick={closeFlow}>
-                Volver al dashboard
-              </button>
+          
             </div>
 
             <div className="gestor-stepper">
