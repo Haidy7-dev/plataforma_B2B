@@ -38,7 +38,21 @@ function Modal({ open, title, subtitle, children, onClose, footer }) {
 
 function normalizeRoleLabel(r) {
   if (!r) return '-'
-  return String(r).toUpperCase()
+  const normalized = String(r).trim().toUpperCase()
+  if (normalized === 'LOGISTICA' || normalized === 'GESTOR') return normalized
+  return normalized
+}
+
+function normalizeRoleForSelect(r) {
+  const normalized = String(r || '').trim().toUpperCase()
+  if (normalized === 'GESTOR') return 'GESTOR'
+  return 'LOGISTICA'
+}
+
+function normalizeRoleForApi(r) {
+  const normalized = String(r || '').trim().toUpperCase()
+  if (normalized === 'GESTOR' || normalized === 'LOGISTICA') return normalized.toLowerCase()
+  return 'logistica'
 }
 
 export default function AdminUsers() {
@@ -117,7 +131,7 @@ export default function AdminUsers() {
       nombre: row.nombre || '',
       correo: row.correo || '',
       passwordTemporal: '',
-      rol: row.rol || 'LOGISTICA',
+      rol: normalizeRoleForSelect(row.rol),
       estado: Boolean(row.estado)
     })
     setModalOpen(true)
@@ -134,7 +148,7 @@ export default function AdminUsers() {
         const payload = {
           nombre: form.nombre,
           correo: form.correo,
-          rol: form.rol,
+          rol: normalizeRoleForApi(form.rol),
           estado: form.estado
         }
         await axios.put(`${API_BASE}/admin/users/${editing.id}`, payload)
@@ -144,7 +158,7 @@ export default function AdminUsers() {
           nombre: form.nombre,
           correo: form.correo,
           passwordTemporal: form.passwordTemporal,
-          rol: form.rol,
+          rol: normalizeRoleForApi(form.rol),
           estado: form.estado
         }
         await axios.post(`${API_BASE}/admin/users`, payload)

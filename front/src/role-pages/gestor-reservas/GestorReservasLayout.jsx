@@ -4,36 +4,8 @@ import PremiumRoleLayout from '../../components/layout/PremiumRoleLayout.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
 const API_BASE = '/api/gestor'
-
-const espacios = [
-  {
-    id: 1,
-    nombre: 'Salón Cerrado',
-    tipo: 'Cerrado',
-    capacidad: 160,
-    estado: 'Disponible',
-    imagen:
-      'https://images.unsplash.com/photo-1519167758481-83f550bb49b3'
-  },
-  {
-    id: 2,
-    nombre: 'Zona Campestre',
-    tipo: 'Abierto',
-    capacidad: 280,
-    estado: 'Disponible',
-    imagen:
-      'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
-  },
-  {
-    id: 3,
-    nombre: 'Terraza Premium',
-    tipo: 'Mixto',
-    capacidad: 120,
-    estado: 'Mantenimiento',
-    imagen:
-      'https://images.unsplash.com/photo-1511578314322-379afb476865'
-  }
-]
+const API_BASE_RAW = 'http://localhost:4000'
+const PLACEHOLDER_IMG = 'https://images.unsplash.com/photo-1497366811353-6870744d04b2?q=80&w=1200&auto=format&fit=crop'
 
 const fechasDisponibles = [
   '2026-05-20',
@@ -53,30 +25,6 @@ const recursosDisponibles = [
   { id: 'r2', nombre: 'Iluminación LED', stock: 6, precio: 180000 },
   { id: 'r3', nombre: 'Pantalla gigante', stock: 2, precio: 320000 },
   { id: 'r4', nombre: 'Sillas premium', stock: 200, precio: 15000 }
-]
-
-const clientesRecientes = [
-  {
-    id: 'CL-88',
-    nombre: 'María Fernández',
-    reservas: 3,
-    estadoFinanciero: 'Al día',
-    contacto: '+57 301 222 3344'
-  },
-  {
-    id: 'CL-89',
-    nombre: 'Innova Corp',
-    reservas: 5,
-    estadoFinanciero: 'Pendiente',
-    contacto: '+57 310 876 9921'
-  },
-  {
-    id: 'CL-90',
-    nombre: 'Grupo Delta',
-    reservas: 2,
-    estadoFinanciero: 'Al día',
-    contacto: '+57 318 555 9090'
-  }
 ]
 
 function EstadoBadge({ estado }) {
@@ -131,6 +79,8 @@ export default function GestorReservasLayout() {
   const empresa = user?.empresa || user?.company || 'Empresa principal'
   const [showFlow, setShowFlow] = useState(location.pathname.includes('/crear-reservas'))
   const [currentStep, setCurrentStep] = useState(1)
+  const [spaces, setSpaces] = useState([])
+  const [spaceSearch, setSpaceSearch] = useState('')
 
   const [form, setForm] = useState({
     cliente: '',
@@ -190,7 +140,7 @@ export default function GestorReservasLayout() {
 
   const links = [
     { to: '/gestor/crear-reservas', label: 'Inicio', icon: 'bolt' },
-    { to: '/gestor/clientes', label: 'Gestionar clientes', icon: 'users' }
+    
   ]
 
   const currentModule = useMemo(() => {
@@ -224,6 +174,33 @@ export default function GestorReservasLayout() {
       form.recursos.map((r) => (r.nombre === nombre ? { ...r, cantidad: qty } : r))
     )
   }
+
+  useEffect(() => {
+    async function loadSpaces() {
+      try {
+        const qs = spaceSearch ? `?search=${encodeURIComponent(spaceSearch)}` : ''
+        const res = await fetch(`${API_BASE}/spaces${qs}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setSpaces([])
+          return
+        }
+        setSpaces(Array.isArray(data?.spaces) ? data.spaces : [])
+      } catch {
+        setSpaces([])
+      }
+    }
+
+    if (showFlow && currentStep === 2) loadSpaces()
+  }, [showFlow, currentStep, spaceSearch, token])
+
+  const filteredSpaces = useMemo(() => {
+    const q = String(spaceSearch || '').trim().toLowerCase()
+    if (!q) return spaces
+    return spaces.filter((s) => `${s.nombre || ''} ${s.capacidad || ''}`.toLowerCase().includes(q))
+  }, [spaces, spaceSearch])
 
   const totalCotizacion = useMemo(
     () => form.recursos.reduce((acc, r) => acc + Number(r.precio || 0) * Number(r.cantidad || 0), 0),
@@ -421,43 +398,29 @@ export default function GestorReservasLayout() {
               </div>
             </div>
             <div className="gestor-availabilityGrid">
-              {espacios.map((esp) => (
-                <div key={esp.id} className="gestor-availabilityCard">
-                  <img src={esp.imagen} alt={esp.nombre} />
-                  <div className="gestor-availabilityBody">
-                    <div className="gestor-availabilityName">{esp.nombre}</div>
-                    <div className="gestor-availabilityMeta">
-                      {esp.tipo} · Capacidad {esp.capacidad}
+              {(spaces || []).map((esp) => {
+                const disponible = Number(esp.estado) === 1
+                const img = esp.imagen
+                  ? (String(esp.imagen).startsWith('/uploads/') ? `${API_BASE_RAW}${esp.imagen}` : esp.imagen)
+                  : PLACEHOLDER_IMG
+
+                return (
+                  <div key={esp.id} className="gestor-availabilityCard">
+                    <img src={img} alt={esp.nombre} />
+                    <div className="gestor-availabilityBody">
+                      <div className="gestor-availabilityName">{esp.nombre}</div>
+                      <div className="gestor-availabilityMeta">
+                        Capacidad {Number(esp.capacidad || 0)} · Precio ${Number(esp.precio || 0)}
+                      </div>
+                      <EstadoBadge estado={disponible ? 'Disponible' : 'Ocupado'} />
                     </div>
-                    <EstadoBadge estado={esp.estado} />
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </section>
         )}
 
-        {!showFlow && currentModule === 'clientes' && (
-          <section className="sa-panel">
-            <div className="sa-panelHeader">
-              <div>
-                <div className="sa-panelTitle">Gestionar clientes</div>
-                <div className="sa-panelSub">Vista de clientes activos para reservas</div>
-              </div>
-            </div>
-            <div className="gestor-clientList">
-              {clientesRecientes.map((cl) => (
-                <div key={cl.id} className="gestor-clientItem">
-                  <div>
-                    <div className="gestor-clientName">{cl.nombre}</div>
-                    <div className="gestor-clientMeta">Reservas: {cl.reservas} · {cl.contacto}</div>
-                  </div>
-                  <EstadoBadge estado={cl.estadoFinanciero} />
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
 
         {showFlow && (
           <section className="sa-panel">
@@ -490,7 +453,7 @@ export default function GestorReservasLayout() {
                   <h3>Seleccionar cliente</h3>
                   <input
                     className="input-form"
-                    placeholder="ID cliente (BD)"
+                    placeholder="ID cliente (Cédula)"
                     value={form.idCliente}
                     onChange={(e) => changeField('idCliente', e.target.value)}
                   />
@@ -514,22 +477,37 @@ export default function GestorReservasLayout() {
                   <h3>Seleccionar espacio</h3>
                   <input
                     className="input-form"
-                    placeholder="ID espacio (BD)"
-                    value={form.idEspacio}
-                    onChange={(e) => changeField('idEspacio', e.target.value)}
+                    placeholder="Buscar espacio por nombre o capacidad"
+                    value={spaceSearch}
+                    onChange={(e) => setSpaceSearch(e.target.value)}
                   />
                   <div className="carousel-container">
-                    {espacios.map((espacio) => (
-                      <div
-                        key={espacio.id}
-                        className={`card-espacio ${form.espacio === espacio.nombre ? 'seleccionado' : ''}`}
-                        onClick={() => changeField('espacio', espacio.nombre)}
-                      >
-                        <img src={espacio.imagen} alt={espacio.nombre} />
-                        <h4>{espacio.nombre}</h4>
-                        <p>{espacio.tipo} · Capacidad {espacio.capacidad}</p>
-                      </div>
-                    ))}
+                    {filteredSpaces.map((espacio) => {
+                      const activo = form.idEspacio === String(espacio.id)
+                      const disponible = Number(espacio.estado) === 1
+                      const imageSrc = espacio.imagen
+                        ? (String(espacio.imagen).startsWith('/uploads/') ? `${API_BASE_RAW}${espacio.imagen}` : espacio.imagen)
+                        : PLACEHOLDER_IMG
+
+                      return (
+                        <div
+                          key={espacio.id}
+                          className={`card-espacio ${activo ? 'seleccionado' : ''}`}
+                          onClick={() => {
+                            changeField('espacio', espacio.nombre || '')
+                            changeField('idEspacio', String(espacio.id))
+                          }}
+                        >
+                          <img src={imageSrc} alt={espacio.nombre || 'Espacio'} />
+                          <h4>{espacio.nombre}</h4>
+                          <p>Capacidad {Number(espacio.capacidad || 0)}</p>
+                          <p>Precio ${Number(espacio.precio || 0)}</p>
+                          <p style={{ color: disponible ? '#16a34a' : '#dc2626', fontWeight: 700 }}>
+                            {disponible ? 'Disponible' : 'Ocupado'}
+                          </p>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -628,8 +606,8 @@ export default function GestorReservasLayout() {
                     <div><strong>Recursos:</strong> {form.recursos.map((r) => `${r.nombre} x${r.cantidad}`).join(', ')}</div>
                     <div><strong>Cotización:</strong> ${totalCotizacion}</div>
                     <div><strong>Factura:</strong> {form.factura || 'N/A'}</div>
-                    <div><strong>ID Cliente (BD):</strong> {form.idCliente}</div>
-                    <div><strong>ID Espacio (BD):</strong> {form.idEspacio}</div>
+                    <div><strong>ID Cliente (Cédula):</strong> {form.idCliente}</div>
+                    <div><strong>ID Espacio:</strong> {form.idEspacio}</div>
                     {saveState.reservaId && <div><strong>ID Reserva (BD):</strong> {saveState.reservaId}</div>}
                   </div>
                   <div className="gestor-success">{saveState.success || 'Reserva confirmada correctamente.'}</div>
@@ -681,3 +659,4 @@ export default function GestorReservasLayout() {
     </PremiumRoleLayout>
   )
 }
+

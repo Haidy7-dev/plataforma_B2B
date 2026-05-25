@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import axios from 'axios'
 import { useAuth } from '../../../auth/AuthContext.jsx'
 
 const recursosDisponibles = [
@@ -8,29 +9,8 @@ const recursosDisponibles = [
   { id: 'r4', nombre: 'Sillas premium', stock: 200, precio: 15000 }
 ]
 
-const espacios = [
-  {
-    id: 1,
-    nombre: 'Salón Cerrado',
-    tipo: 'Cerrado',
-    capacidad: 160,
-    imagen: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3'
-  },
-  {
-    id: 2,
-    nombre: 'Zona Campestre',
-    tipo: 'Abierto',
-    capacidad: 280,
-    imagen: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
-  },
-  {
-    id: 3,
-    nombre: 'Terraza Premium',
-    tipo: 'Mixto',
-    capacidad: 120,
-    imagen: 'https://images.unsplash.com/photo-1511578314322-379afb476865'
-  }
-]
+const API_BASE = 'http://localhost:4000'
+const PLACEHOLDER_IMG = 'https://images.unsplash.com/photo-1497366811353-6870744d04b2?q=80&w=1200&auto=format&fit=crop'
 
 const fechasDisponibles = ['2026-05-20', '2026-05-22', '2026-05-25', '2026-05-28']
 const horariosDisponibles = ['08:00 - 12:00', '13:00 - 17:00', '18:00 - 22:00']
@@ -40,6 +20,8 @@ const stepLabels = ['Cliente', 'Espacio', 'Fecha', 'Horario', 'Recursos', 'Cotiz
 export default function ReservationsFlow() {
   const { token } = useAuth()
   const [currentStep, setCurrentStep] = useState(1)
+  const [spaces, setSpaces] = useState([])
+  const [spaceSearch, setSpaceSearch] = useState('')
   const [saveState, setSaveState] = useState({ loading: false, error: '', success: '', reservaId: null })
   const [form, setForm] = useState({
     cliente: '',
@@ -76,6 +58,27 @@ export default function ReservationsFlow() {
       form.recursos.map((r) => (r.nombre === nombre ? { ...r, cantidad: qty } : r))
     )
   }
+
+  useEffect(() => {
+    async function fetchSpaces() {
+      try {
+        const res = await axios.get(`${API_BASE}/admin/spaces`, {
+          params: { search: spaceSearch || undefined },
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
+        setSpaces(Array.isArray(res?.data?.spaces) ? res.data.spaces : [])
+      } catch {
+        setSpaces([])
+      }
+    }
+    fetchSpaces()
+  }, [spaceSearch, token])
+
+  const filteredSpaces = useMemo(() => {
+    const q = String(spaceSearch || '').trim().toLowerCase()
+    if (!q) return spaces
+    return spaces.filter((s) => `${s.nombre || ''} ${s.capacidad || ''}`.toLowerCase().includes(q))
+  }, [spaces, spaceSearch])
 
   const totalCotizacion = useMemo(
     () => form.recursos.reduce((acc, r) => acc + Number(r.precio || 0) * Number(r.cantidad || 0), 0),
@@ -131,7 +134,7 @@ export default function ReservationsFlow() {
         recursos: form.recursos.map((r) => ({ nombre: r.nombre, cantidad: Number(r.cantidad || 1) }))
       }
 
-      const res = await fetch('/api/gestor/reservations', {
+      const res = await fetch('/api/reservations/reservations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -186,7 +189,7 @@ export default function ReservationsFlow() {
         {currentStep === 1 && (
           <div className="gestor-flowCard">
             <h3>Seleccionar cliente</h3>
-            <input className="input-form" placeholder="ID cliente (BD)" value={form.idCliente} onChange={(e) => changeField('idCliente', e.target.value)} />
+            <input className="input-form" placeholder="ID cliente (Cédula)" value={form.idCliente} onChange={(e) => changeField('idCliente', e.target.value)} />
             <input className="input-form" placeholder="Nombre del cliente" value={form.cliente} onChange={(e) => changeField('cliente', e.target.value)} />
             <input className="input-form" placeholder="Teléfono de contacto" value={form.telefono} onChange={(e) => changeField('telefono', e.target.value)} />
           </div>
@@ -195,15 +198,42 @@ export default function ReservationsFlow() {
         {currentStep === 2 && (
           <div className="gestor-flowCard">
             <h3>Seleccionar espacio</h3>
-            <input className="input-form" placeholder="ID espacio (BD)" value={form.idEspacio} onChange={(e) => changeField('idEspacio', e.target.value)} />
+            <input
+              className="input-form"
+              placeholder="Buscar espacio por nombre o capacidad"
+              value={spaceSearch}
+              onChange={(e) => setSpaceSearch(e.target.value)}
+            />
             <div className="carousel-container">
-              {espacios.map((espacio) => (
-                <div key={espacio.id} className={`card-espacio ${form.espacio === espacio.nombre ? 'seleccionado' : ''}`} onClick={() => changeField('espacio', espacio.nombre)}>
-                  <img src={espacio.imagen} alt={espacio.nombre} />
-                  <h4>{espacio.nombre}</h4>
-                  <p>{espacio.tipo} · Capacidad {espacio.capacidad}</p>
-                </div>
-              ))}
+              {filteredSpaces.length === 0 && (
+                <div className="sa-tdMuted">No hay espacios disponibles para tu empresa.</div>
+              )}
+              {filteredSpaces.map((espacio) => {
+                const activo = form.idEspacio === String(espacio.id)
+                const disponible = Number(espacio.estado) === 1
+                const imageSrc = espacio.imagen
+                  ? (String(espacio.imagen).startsWith('/uploads/') ? `${API_BASE}${espacio.imagen}` : espacio.imagen)
+                  : PLACEHOLDER_IMG
+
+                return (
+                  <div
+                    key={espacio.id}
+                    className={`card-espacio ${activo ? 'seleccionado' : ''}`}
+                    onClick={() => {
+                      changeField('espacio', espacio.nombre || '')
+                      changeField('idEspacio', String(espacio.id))
+                    }}
+                  >
+                    <img src={imageSrc} alt={espacio.nombre || 'Espacio'} />
+                    <h4>{espacio.nombre}</h4>
+                    <p>Capacidad {Number(espacio.capacidad || 0)}</p>
+                    <p>Precio ${Number(espacio.precio || 0)}</p>
+                    <p style={{ color: disponible ? '#16a34a' : '#dc2626', fontWeight: 700 }}>
+                      {disponible ? 'Disponible' : 'Ocupado'}
+                    </p>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
@@ -277,8 +307,8 @@ export default function ReservationsFlow() {
               <div><strong>Recursos:</strong> {form.recursos.map((r) => `${r.nombre} x${r.cantidad}`).join(', ')}</div>
               <div><strong>Cotización:</strong> ${totalCotizacion}</div>
               <div><strong>Factura:</strong> {form.factura || 'N/A'}</div>
-              <div><strong>ID Cliente (BD):</strong> {form.idCliente}</div>
-              <div><strong>ID Espacio (BD):</strong> {form.idEspacio}</div>
+              <div><strong>ID Cliente (Cédula):</strong> {form.idCliente}</div>
+              <div><strong>ID Espacio:</strong> {form.idEspacio}</div>
               {saveState.reservaId && <div><strong>ID Reserva (BD):</strong> {saveState.reservaId}</div>}
             </div>
             <div className="gestor-success">{saveState.success || 'Reserva confirmada correctamente.'}</div>

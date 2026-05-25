@@ -1,4 +1,8 @@
 import express from 'express'
+import fs from 'fs'
+import path from 'path'
+import multer from 'multer'
+import { fileURLToPath } from 'url'
 import { requireRole } from '../middleware/requireRole.js'
 import { authJwt } from '../middleware/authJwt.js'
 import { dataStore } from '../services/dataStore.js'
@@ -73,10 +77,42 @@ async function recalculateFinancialStatus(conn, id_reserva) {
   return { total, pagado, estado_financiero: estado }
 }
 
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const espaciosUploadDir = path.join(__dirname, '../../uploads/espacios')
+if (!fs.existsSync(espaciosUploadDir)) fs.mkdirSync(espaciosUploadDir, { recursive: true })
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, espaciosUploadDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg'
+    cb(null, `espacio-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`)
+  }
+})
+
+const uploadEspacioImage = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!file?.mimetype?.startsWith('image/')) return cb(new Error('Solo se permiten archivos de imagen'))
+    cb(null, true)
+  }
+})
+
 export const adminRouter = express.Router()
 
 adminRouter.use(authJwt)
 adminRouter.use(requireRole(['admin']))
+
+adminRouter.post('/spaces/upload-image', uploadEspacioImage.single('image'), async (req, res) => {
+  try {
+    if (!req.file?.filename) return res.status(400).json({ message: 'No se recibió imagen' })
+    const imageUrl = `/uploads/espacios/${req.file.filename}`
+    return res.status(201).json({ imageUrl })
+  } catch (e) {
+    return res.status(500).json({ message: 'Error subiendo imagen', error: String(e?.message || e) })
+  }
+})
 
 // Gestión de usuarios (multiempresa por id_empresa)
 adminRouter.use(adminUsersRouter)
@@ -514,7 +550,7 @@ adminRouter.get('/spaces', async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      `SELECT id_espacio AS id, nombre, capacidad, precio, estado, id_empresa
+      `SELECT id_espacio AS id, nombre, capacidad, precio, estado, id_empresa, imagen
        FROM espacio
        ${where}
        ORDER BY id_espacio DESC`,
@@ -530,18 +566,25 @@ adminRouter.post('/spaces', async (req, res) => {
   const id_empresa = req.user?.id_empresa
   if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
   const pool = getPool()
-  const { nombre, capacidad, precio, estado } = req.body || {}
+  const { nombre, capacidad, precio, estado, imagen } = req.body || {}
 
   if (!nombre) return res.status(400).json({ message: 'nombre es requerido' })
 
   try {
     const [ins] = await pool.query(
-      'INSERT INTO espacio (nombre, capacidad, precio, estado, id_empresa) VALUES (?, ?, ?, ?, ?)',
-      [String(nombre), Number(capacidad || 0), Number(precio || 0), toBool(estado, true) ? 1 : 0, Number(id_empresa)]
+      'INSERT INTO espacio (nombre, capacidad, precio, estado, id_empresa, imagen) VALUES (?, ?, ?, ?, ?, ?)',
+      [
+        String(nombre),
+        Number(capacidad || 0),
+        Number(precio || 0),
+        toBool(estado, true) ? 1 : 0,
+        Number(id_empresa),
+        imagen ? String(imagen).trim() : null
+      ]
     )
 
     const [rows] = await pool.query(
-      'SELECT id_espacio AS id, nombre, capacidad, precio, estado, id_empresa FROM espacio WHERE id_espacio = ? LIMIT 1',
+      'SELECT id_espacio AS id, nombre, capacidad, precio, estado, id_empresa, imagen FROM espacio WHERE id_espacio = ? LIMIT 1',
       [ins.insertId]
     )
     return res.status(201).json({ space: rows?.[0] || null })
@@ -557,7 +600,7 @@ adminRouter.put('/spaces/:id', async (req, res) => {
   if (!id) return res.status(400).json({ message: 'id inválido' })
 
   const pool = getPool()
-  const { nombre, capacidad, precio, estado } = req.body || {}
+  const { nombre, capacidad, precio, estado, imagen } = req.body || {}
 
   try {
     const [exists] = await pool.query('SELECT id_espacio FROM espacio WHERE id_espacio = ? AND id_empresa = ? LIMIT 1', [id, Number(id_empresa)])
@@ -568,20 +611,22 @@ adminRouter.put('/spaces/:id', async (req, res) => {
        SET nombre = COALESCE(?, nombre),
            capacidad = COALESCE(?, capacidad),
            precio = COALESCE(?, precio),
-           estado = COALESCE(?, estado)
+           estado = COALESCE(?, estado),
+           imagen = COALESCE(?, imagen)
        WHERE id_espacio = ? AND id_empresa = ?`,
       [
         nombre !== undefined ? String(nombre) : null,
         capacidad !== undefined ? Number(capacidad) : null,
         precio !== undefined ? Number(precio) : null,
         estado !== undefined ? (toBool(estado, true) ? 1 : 0) : null,
+        imagen !== undefined ? String(imagen || '').trim() : null,
         id,
         Number(id_empresa)
       ]
     )
 
     const [rows] = await pool.query(
-      'SELECT id_espacio AS id, nombre, capacidad, precio, estado, id_empresa FROM espacio WHERE id_espacio = ? AND id_empresa = ? LIMIT 1',
+      'SELECT id_espacio AS id, nombre, capacidad, precio, estado, id_empresa, imagen FROM espacio WHERE id_espacio = ? AND id_empresa = ? LIMIT 1',
       [id, Number(id_empresa)]
     )
     res.json({ space: rows?.[0] || null })

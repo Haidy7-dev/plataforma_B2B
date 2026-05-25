@@ -44,6 +44,17 @@ function resolveEstadoPago(estadoFinanciero) {
   return 'PENDIENTE'
 }
 
+function isValidEmail(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return true
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim())
+}
+
+function isValidPhone(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return false
+  const digits = String(value).replace(/\D/g, '')
+  return /^\d{7,}$/.test(digits)
+}
+
 async function hasCedulaColumn(conn) {
   const [rows] = await conn.query("SHOW COLUMNS FROM cliente LIKE 'cedula'")
   return Array.isArray(rows) && rows.length > 0
@@ -168,42 +179,78 @@ async function calculateAndPersistDetails(conn, { id_reserva, recursos, id_empre
 // CLIENTES
 // ====================
 reservationsRouter.get('/clients', async (req, res) => {
+  const id_empresa = req.user?.id_empresa
+  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
+
   const pool = getPool()
   const conn = await pool.getConnection()
   try {
     const q = String(req.query?.query || '').trim()
-    const limit = Math.min(50, Math.max(1, Number(req.query?.limit || 20)))
-    const hasCedula = await hasCedulaColumn(conn)
+    const limit = Math.min(100, Math.max(1, Number(req.query?.limit || 50)))
 
-    if (!q) {
-      const baseSql = hasCedula
-        ? `SELECT id_cliente, nombre, telefono, correo, cedula FROM cliente ORDER BY id_cliente DESC LIMIT ?`
-        : `SELECT id_cliente, nombre, telefono, correo FROM cliente ORDER BY id_cliente DESC LIMIT ?`
-      const [rows] = await conn.query(baseSql, [limit])
-      return res.json({ clients: rows || [] })
-    }
-
-    if (hasCedula) {
-      const [rows] = await conn.query(
-        `SELECT id_cliente, nombre, telefono, correo, cedula
-         FROM cliente
-         WHERE cedula LIKE ? OR nombre LIKE ? OR telefono LIKE ? OR correo LIKE ?
-         ORDER BY id_cliente DESC
-         LIMIT ?`,
-        [`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, limit]
+    const terms = [Number(id_empresa)]
+    let where = `
+      WHERE EXISTS (
+        SELECT 1
+        FROM reserva r
+        INNER JOIN espacio e ON e.id_espacio = r.id_espacio
+        WHERE r.id_cliente = c.id_cliente
+          AND e.id_empresa = ?
       )
-      return res.json({ clients: rows || [] })
+    `
+
+    if (q) {
+      where += ' AND (c.nombre LIKE ? OR c.telefono LIKE ? OR c.correo LIKE ?)'
+      const like = `%${q}%`
+      terms.push(like, like, like)
     }
+
+    terms.push(limit)
 
     const [rows] = await conn.query(
-      `SELECT id_cliente, nombre, telefono, correo
-       FROM cliente
-       WHERE nombre LIKE ? OR telefono LIKE ? OR correo LIKE ?
-       ORDER BY id_cliente DESC
+      `SELECT
+          c.id_cliente,
+          c.nombre,
+          c.telefono,
+          c.correo,
+          COUNT(DISTINCT r.id_reserva) AS reservasCount,
+          COALESCE(SUM(CASE WHEN UPPER(r.estado_financiero) IN ('PENDIENTE','PARCIAL','DEUDA') THEN COALESCE(r.total,0) ELSE 0 END), 0) AS faltante,
+          SUM(CASE WHEN UPPER(r.estado_financiero) = 'DEUDA' THEN 1 ELSE 0 END) AS deudaCount,
+          SUM(CASE WHEN UPPER(r.estado_financiero) = 'PAGADO' THEN 1 ELSE 0 END) AS pagadoCount
+       FROM cliente c
+       LEFT JOIN reserva r ON r.id_cliente = c.id_cliente
+       LEFT JOIN espacio e ON e.id_espacio = r.id_espacio
+       ${where}
+       GROUP BY c.id_cliente, c.nombre, c.telefono, c.correo
+       ORDER BY c.id_cliente DESC
        LIMIT ?`,
-      [`%${q}%`, `%${q}%`, `%${q}%`, limit]
+      terms
     )
-    return res.json({ clients: rows || [] })
+
+    const clients = (rows || []).map((r) => {
+      const reservasCount = Number(r.reservasCount || 0)
+      const deudaCount = Number(r.deudaCount || 0)
+      const pagadoCount = Number(r.pagadoCount || 0)
+      const faltante = Number(r.faltante || 0)
+
+      let estadoFinancieroResumen = 'SIN RESERVAS'
+      if (reservasCount === 0) estadoFinancieroResumen = 'SIN RESERVAS'
+      else if (deudaCount > 0) estadoFinancieroResumen = 'DEUDA'
+      else if (faltante > 0) estadoFinancieroResumen = 'PENDIENTE'
+      else if (pagadoCount > 0 && faltante === 0) estadoFinancieroResumen = 'PAGADO'
+
+      return {
+        id_cliente: Number(r.id_cliente),
+        nombre: r.nombre,
+        telefono: r.telefono,
+        correo: r.correo,
+        reservasCount,
+        faltante,
+        estadoFinancieroResumen
+      }
+    })
+
+    return res.json({ clients })
   } catch (e) {
     return res.status(500).json({ message: 'Error consultando clientes', error: String(e?.message || e) })
   } finally {
@@ -314,6 +361,38 @@ reservationsRouter.delete('/clients/:id', async (req, res) => {
     return res.status(500).json({ message: 'Error eliminando cliente', error: String(e?.message || e) })
   } finally {
     conn.release()
+  }
+})
+
+// ====================
+// ESPACIOS (para flujo gestor)
+// ====================
+reservationsRouter.get('/spaces', async (req, res) => {
+  const id_empresa = req.user?.id_empresa
+  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
+
+  const pool = getPool()
+  const search = String(req.query?.search || '').trim()
+
+  try {
+    const terms = [Number(id_empresa)]
+    let where = 'WHERE id_empresa = ?'
+    if (search) {
+      where += ' AND nombre LIKE ?'
+      terms.push(`%${search}%`)
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id_espacio AS id, nombre, capacidad, precio, estado, id_empresa, imagen
+       FROM espacio
+       ${where}
+       ORDER BY id_espacio DESC`,
+      terms
+    )
+
+    return res.json({ spaces: rows || [] })
+  } catch (e) {
+    return res.status(500).json({ message: 'Error listando espacios', error: String(e?.message || e) })
   }
 })
 

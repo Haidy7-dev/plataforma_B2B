@@ -7,6 +7,7 @@ import AdminUsers from './pages/AdminUsers.jsx'
 import ReservationsFlow from './pages/ReservationsFlow.jsx'
 import AdminReports from './pages/AdminReports.jsx'
 import InventoryImport from './pages/InventoryImport.jsx'
+import AdminSpaces from './pages/AdminSpaces.jsx'
 
 export default function AdminLayout() {
   return (
@@ -18,6 +19,7 @@ export default function AdminLayout() {
         { to: '/admin/users', label: 'Gestión de usuarios' },
         { to: '/admin/reservas', label: 'Reservas' },
         { to: '/admin/reports', label: 'Reportes' },
+        { to: '/admin/espacios', label: 'Espacios' },
         { to: '/admin/inventario-csv', label: 'Inventario CSV' }
       ]}
     >
@@ -26,6 +28,7 @@ export default function AdminLayout() {
         <Route path="/users" element={<AdminUsers />} />
         <Route path="/reservas" element={<ReservationsFlow />} />
         <Route path="/reports" element={<AdminReports />} />
+        <Route path="/espacios" element={<AdminSpaces />} />
         <Route path="/inventario-csv" element={<InventoryImport />} />
       </Routes>
     </PremiumRoleLayout>

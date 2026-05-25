@@ -233,12 +233,11 @@ superAdminCompaniesRouter.put('/companies/:companyId/users/:userId', async (req,
   const pool = getPool()
   const { companyId, userId } = req.params
   const payload = req.body || {}
-  const { nombre, correo, telefono, estado } = payload
+  const { nombre, correo, estado } = payload
 
   if (!companyId || !userId) return res.status(400).json({ message: 'companyId y userId son requeridos' })
   if (!nombre || !correo) return res.status(400).json({ message: 'nombre y correo son requeridos' })
   if (!isValidEmail(correo)) return res.status(400).json({ message: 'Email inválido' })
-  if (!isValidPhone(telefono)) return res.status(400).json({ message: 'Teléfono inválido: solo números y mínimo 7 dígitos' })
 
   try {
     const [existingUser] = await pool.query(

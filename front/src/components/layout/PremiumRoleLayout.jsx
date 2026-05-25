@@ -176,7 +176,7 @@ export default function PremiumRoleLayout({
     <div className="sa-shell">
       <aside className="sa-sidebar">
         <div className="sa-brand">
-          <div className="sa-logo">B2B</div>
+          <div className="sa-logo">7T</div>
           <div>
             <div className="sa-brandTop">{welcomeRole}</div>
             <div className="sa-brandBottom">Panel</div>

@@ -283,7 +283,7 @@ export default function SuperAdminEmpresas() {
           <button
             disabled={loading || !adminForm.companyId}
             type="submit"
-            style={{ padding: '10px 16px', borderRadius: 10, border: 0, fontWeight: 900, background: '#16a34a', color: 'white' }}
+            style={{ padding: '10px 16px', borderRadius: 10, border: 0, fontWeight: 900, background: '#2563eb', color: 'white' }}
           >
             {loading ? 'Procesando...' : 'Crear admin'}
           </button>

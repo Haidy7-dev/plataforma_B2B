@@ -12,13 +12,13 @@ adminUsersRouter.get('/users', async (req, res) => {
   const id_empresa = req.user?.id_empresa
   if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
 
-  const roleNormalized = role ? String(role).toUpperCase() : null
-  const allowed = ['LOGISTICA', 'GESTOR']
+  const roleNormalized = role ? String(role).trim().toLowerCase() : null
+  const allowed = ['logistica', 'gestor']
   const effectiveRole = roleNormalized && allowed.includes(roleNormalized) ? roleNormalized : null
 
   try {
     const terms = []
-    let where = 'WHERE id_empresa = ? AND rol IN (\'LOGISTICA\', \'GESTOR\')'
+    let where = 'WHERE id_empresa = ? AND rol IN (\'logistica\', \'gestor\')'
     terms.push(Number(id_empresa))
 
     if (effectiveRole) {
@@ -79,9 +79,9 @@ adminUsersRouter.post('/users', async (req, res) => {
   if (!correo) return res.status(400).json({ message: 'correo es requerido' })
   if (!passwordTemporal) return res.status(400).json({ message: 'passwordTemporal es requerido' })
 
-  const rolNormalized = String(rol || '').toUpperCase()
-  const allowed = ['LOGISTICA', 'GESTOR']
-  if (!allowed.includes(rolNormalized)) return res.status(400).json({ message: 'rol inválido. Solo LOGISTICA o GESTOR.' })
+  const rolNormalized = String(rol || '').trim().toLowerCase()
+  const allowed = ['logistica', 'gestor']
+  if (!allowed.includes(rolNormalized)) return res.status(400).json({ message: 'rol inválido. Solo logistica o gestor.' })
 
   const estadoBool = estado === undefined ? true : Boolean(estado)
 
@@ -116,9 +116,9 @@ adminUsersRouter.put('/users/:id', async (req, res) => {
   const userId = Number(req.params.id)
   if (!userId) return res.status(400).json({ message: 'id inválido' })
 
-  const rolNormalized = rol ? String(rol).toUpperCase() : null
-  const allowed = ['LOGISTICA', 'GESTOR']
-  if (rolNormalized && !allowed.includes(rolNormalized)) return res.status(400).json({ message: 'rol inválido. Solo LOGISTICA o GESTOR.' })
+  const rolNormalized = rol ? String(rol).trim().toLowerCase() : null
+  const allowed = ['logistica', 'gestor']
+  if (rolNormalized && !allowed.includes(rolNormalized)) return res.status(400).json({ message: 'rol inválido. Solo logistica o gestor.' })
 
   try {
     const [existing] = await pool.query(

@@ -565,11 +565,14 @@ button{ font-family:inherit; }
 .sa-modal{
   width: 760px;
   max-width: 100%;
+  max-height: calc(100vh - 32px);
   border-radius: 20px;
   background: rgba(255,255,255,0.95);
   border: 1px solid rgba(148,163,184,0.28);
   box-shadow: 0 30px 90px rgba(2,6,23,0.35);
   overflow:hidden;
+  display:flex;
+  flex-direction:column;
 }
 
 .sa-modalHeader{
@@ -585,7 +588,7 @@ button{ font-family:inherit; }
 .sa-modalSub{ margin-top: 4px; color: var(--muted); font-weight: 850; font-size: 12px; }
 .sa-modalClose{ border:none; background: rgba(148,163,184,0.18); width: 40px; height: 40px; border-radius: 14px; cursor:pointer; font-weight: 1000; }
 
-.sa-modalBody{ padding: 14px 16px; }
+.sa-modalBody{ padding: 14px 16px; overflow-y: auto; }
 .sa-modalFooter{ padding: 14px 16px; display:flex; justify-content:flex-end; gap: 12px; border-top: 1px solid rgba(148,163,184,0.22); }
 
 @media (max-width: 1050px){

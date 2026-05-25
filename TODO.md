@@ -1,5 +1,11 @@
-- [x] Separar vistas de Super Admin: módulo Usuarios solo visualización, módulo Empresas con creación.
-- [x] Crear nueva página para módulo Empresas con crear empresa + crear admin.
-- [x] Ajustar `SuperAdminLayout.jsx` para enrutar `/usuarios` y `/empresas` a componentes distintos.
-- [x] Dejar `EmpresasUsuarios.jsx` solo como vista/listado (empresas + admins), sin formularios de creación.
-- [x] Marcar tareas completadas al finalizar.
+# TODO - Ajustes sección "Gestionar clientes" (Gestor)
+
+- [ ] Revisar y preparar estado para clientes en `GestorReservasLayout.jsx`.
+- [ ] Implementar carga de clientes desde `/api/gestor/clients` con token.
+- [ ] Dejar en la parte superior de "Gestionar clientes" solo el botón **Crear cliente**.
+- [ ] Implementar modal/form para crear/editar cliente con campos: nombre, teléfono, correo.
+- [ ] Mostrar tarjetas de clientes con: nombre, teléfono, cantidad de reservas y estado financiero.
+- [ ] Agregar botones **editar** y **eliminar** junto al nombre en cada tarjeta.
+- [ ] Mostrar estado financiero exactamente como: PAGADO, DEUDA, PENDIENTE (+ faltante), SIN RESERVAS.
+- [ ] Mantener diseño actual y responsive reutilizando clases/componentes existentes.
+- [ ] Actualizar TODO marcando tareas completadas.

@@ -37,12 +37,12 @@ export default function LoginPage() {
         <section className={styles.left}>
           <div className={styles.leftInner}>
             <div className={styles.brand}>
-              <div className={styles.logo}>B2B</div>
+              <div className={styles.logo}>7T</div>
               <div>
                 <div style={{ fontWeight: 900, fontSize: 13, letterSpacing: 0.6, opacity: 0.95 }}>
                   Plataforma
                 </div>
-                <div style={{ fontWeight: 900, fontSize: 16, opacity: 0.95 }}>B2B Admin</div>
+                <div style={{ fontWeight: 900, fontSize: 16, opacity: 0.95 }}>Sevent</div>
               </div>
             </div>
 
@@ -54,7 +54,7 @@ export default function LoginPage() {
         </section>
 
         <section className={styles.right}>
-          <h2 className={styles.formTitle}>Login</h2>
+          <h2 className={styles.formTitle}>Iniciar Sesión</h2>
           <p className={styles.formHint}>Ingresa con tu correo y contraseña para continuar.</p>
 
           <form className={styles.row} onSubmit={onSubmit}>
@@ -91,7 +91,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className={styles.footer}>© {new Date().getFullYear()} Plataforma B2B</div>
+          <div className={styles.footer}>© {new Date().getFullYear()} Plataforma Sevent</div>
         </section>
       </div>
     </div>

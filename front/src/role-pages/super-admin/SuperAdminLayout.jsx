@@ -143,8 +143,8 @@ export default function SuperAdminLayout() {
       roleLabel="Super Admin"
       links={[
         { to: '/super-admin', label: 'Inicio', icon: 'bolt' },
-        { to: '/super-admin/usuarios', label: 'Usuarios', icon: 'users' },
-        { to: '/super-admin/empresas', label: 'Empresas', icon: 'store' }
+        { to: '/super-admin/usuarios', label: 'Usuarios/Empresa', icon: 'users' },
+        { to: '/super-admin/empresas', label: 'Crear', icon: 'store' }
       ]}
     >
       <Routes>
