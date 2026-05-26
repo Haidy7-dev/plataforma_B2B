@@ -52,7 +52,7 @@ function isValidEmail(value) {
 function isValidPhone(value) {
   if (value === null || value === undefined || String(value).trim() === '') return false
   const digits = String(value).replace(/\D/g, '')
-  return /^\d{7,}$/.test(digits)
+  return /^\d{10}$/.test(digits)
 }
 
 async function hasCedulaColumn(conn) {
@@ -243,7 +243,7 @@ reservationsRouter.post('/clients', async (req, res) => {
     const idCliente = Number(id_cliente)
 
     const nombreNorm = String(nombre || '').trim()
-    const telefonoNorm = String(telefono || '').trim()
+    const telefonoDigits = String(telefono || '').replace(/\D/g, '')
     const correoNorm = String(correo || '').trim()
 
     if (!idCliente) {
@@ -258,7 +258,7 @@ reservationsRouter.post('/clients', async (req, res) => {
       })
     }
 
-    if (!telefonoNorm) {
+    if (!telefonoDigits) {
       return res.status(400).json({
         message: 'telefono es requerido'
       })
@@ -270,9 +270,9 @@ reservationsRouter.post('/clients', async (req, res) => {
       })
     }
 
-    if (!isValidPhone(telefonoNorm)) {
+    if (!isValidPhone(telefonoDigits)) {
       return res.status(400).json({
-        message: 'telefono inválido'
+        message: 'El teléfono debe tener exactamente 10 dígitos'
       })
     }
 
@@ -314,7 +314,7 @@ reservationsRouter.post('/clients', async (req, res) => {
       [
         idCliente,
         nombreNorm,
-        telefonoNorm,
+        telefonoDigits,
         correoNorm
       ]
     )
@@ -370,6 +370,10 @@ reservationsRouter.put('/clients/:id', async (req, res) => {
       correo
     } = req.body || {}
 
+    const nombreNorm = String(nombre || '').trim()
+    const telefonoDigits = String(telefono || '').replace(/\D/g, '')
+    const correoNorm = String(correo || '').trim()
+
     const [exists] = await conn.query(
       `
       SELECT id_cliente
@@ -386,6 +390,36 @@ reservationsRouter.put('/clients/:id', async (req, res) => {
       })
     }
 
+    if (!nombreNorm) {
+      return res.status(400).json({
+        message: 'nombre es requerido'
+      })
+    }
+
+    if (!telefonoDigits) {
+      return res.status(400).json({
+        message: 'telefono es requerido'
+      })
+    }
+
+    if (!correoNorm) {
+      return res.status(400).json({
+        message: 'correo es requerido'
+      })
+    }
+
+    if (!isValidPhone(telefonoDigits)) {
+      return res.status(400).json({
+        message: 'El teléfono debe tener exactamente 10 dígitos'
+      })
+    }
+
+    if (!isValidEmail(correoNorm)) {
+      return res.status(400).json({
+        message: 'correo inválido'
+      })
+    }
+
     await conn.query(
       `
       UPDATE cliente
@@ -396,9 +430,9 @@ reservationsRouter.put('/clients/:id', async (req, res) => {
       WHERE id_cliente = ?
       `,
       [
-        String(nombre || '').trim(),
-        String(telefono || '').trim(),
-        String(correo || '').trim(),
+        nombreNorm,
+        telefonoDigits,
+        correoNorm,
         id
       ]
     )

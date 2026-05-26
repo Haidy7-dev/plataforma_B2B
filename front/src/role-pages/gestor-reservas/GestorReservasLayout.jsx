@@ -59,22 +59,61 @@ export default function GestorReservasLayout() {
 
   const [loading, setLoading] = useState(false)
 
+  function normalizeDigits(value) {
+    return String(value || '').replace(/\D/g, '')
+  }
+
+  function isValidNombre(value) {
+    return String(value || '').trim().length >= 3
+  }
+
+  function isValidCedula(value) {
+    return /^\d+$/.test(String(value || '').trim())
+  }
+
+  function isValidCorreo(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim())
+  }
+
+  function isValidTelefono(value) {
+    return /^\d{10}$/.test(String(value || '').trim())
+  }
+
   function changeField(name, value) {
+    let nextValue = value
+    if (name === 'telefono' || name === 'idCliente') {
+      nextValue = normalizeDigits(value)
+    }
+
     setForm((prev) => ({
       ...prev,
-      [name]: value
+      [name]: nextValue
     }))
   }
 
   const filteredSpaces = useMemo(() => spaces, [spaces])
 
+  const step1Validation = useMemo(() => {
+    const idCliente = String(form.idCliente || '').trim()
+    const nombre = String(form.nombre || '').trim()
+    const telefono = String(form.telefono || '').trim()
+    const correo = String(form.correo || '').trim()
+
+    return {
+      cedulaValid: isValidCedula(idCliente),
+      nombreValid: isValidNombre(nombre),
+      telefonoValid: isValidTelefono(telefono),
+      correoValid: isValidCorreo(correo)
+    }
+  }, [form.idCliente, form.nombre, form.telefono, form.correo])
+
   function canContinue(step) {
     if (step === 1) {
       return (
-        form.idCliente.trim().length > 0 &&
-        form.nombre.trim().length > 2 &&
-        form.telefono.trim().length > 5 &&
-        form.correo.trim().length > 5
+        step1Validation.cedulaValid &&
+        step1Validation.nombreValid &&
+        step1Validation.telefonoValid &&
+        step1Validation.correoValid
       )
     }
     if (step === 2) return Boolean(form.idEspacio)
@@ -286,9 +325,15 @@ export default function GestorReservasLayout() {
               <input
                 className="input-form"
                 placeholder="Cédula (id_cliente)"
+                inputMode="numeric"
                 value={form.idCliente}
                 onChange={(e) => changeField('idCliente', e.target.value)}
               />
+              {!step1Validation.cedulaValid && form.idCliente.trim().length > 0 && (
+                <small style={{ color: '#dc2626', fontWeight: 600 }}>
+                  La cédula debe contener solo números.
+                </small>
+              )}
 
               <input
                 className="input-form"
@@ -296,13 +341,27 @@ export default function GestorReservasLayout() {
                 value={form.nombre}
                 onChange={(e) => changeField('nombre', e.target.value)}
               />
+              {!step1Validation.nombreValid && form.nombre.trim().length > 0 && (
+                <small style={{ color: '#dc2626', fontWeight: 600 }}>
+                  El nombre debe tener al menos 3 caracteres.
+                </small>
+              )}
 
               <input
                 className="input-form"
-                placeholder="Teléfono"
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                pattern="\d{10}"
+                placeholder="Teléfono (10 dígitos)"
                 value={form.telefono}
                 onChange={(e) => changeField('telefono', e.target.value)}
               />
+              {!step1Validation.telefonoValid && form.telefono.trim().length > 0 && (
+                <small style={{ color: '#dc2626', fontWeight: 600 }}>
+                  El teléfono debe tener exactamente 10 dígitos numéricos.
+                </small>
+              )}
 
               <input
                 className="input-form"
@@ -310,6 +369,11 @@ export default function GestorReservasLayout() {
                 value={form.correo}
                 onChange={(e) => changeField('correo', e.target.value)}
               />
+              {!step1Validation.correoValid && form.correo.trim().length > 0 && (
+                <small style={{ color: '#dc2626', fontWeight: 600 }}>
+                  Ingresa un correo válido.
+                </small>
+              )}
             </div>
           )}
 
