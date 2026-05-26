@@ -1,10 +1,10 @@
 import jwt from 'jsonwebtoken'
 
 export function authJwt(req, res, next) {
-  const header = req.headers.authorization || ''
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null
+  const header = String(req.headers.authorization || '').trim()
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : null
 
-  if (!token) return res.status(401).json({ message: 'Falta token JWT' })
+  if (!token) return res.status(401).json({ message: 'Falta token JWT (Authorization Bearer)' })
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET)
@@ -17,10 +17,10 @@ export function authJwt(req, res, next) {
 
 export function signJwt(user) {
   const payload = {
-    sub: user.id,
-    email: user.email,
-    role: user.role,
-    id_empresa: user.id_empresa || null
+    id_usuario: Number(user.id_usuario),
+    id_empresa: user.id_empresa != null ? Number(user.id_empresa) : null,
+    rol: user.rol,
+    nombre: user.nombre
   }
 
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' })

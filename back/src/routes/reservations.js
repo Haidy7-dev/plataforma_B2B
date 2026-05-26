@@ -178,254 +178,302 @@ async function calculateAndPersistDetails(conn, { id_reserva, recursos, id_empre
 // ====================
 // CLIENTES
 // ====================
-reservationsRouter.get('/clients', async (req, res) => {
-  const id_empresa = req.user?.id_empresa
-  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
-
+reservationsRouter.get('/clients/:id', async (req, res) => {
   const pool = getPool()
   const conn = await pool.getConnection()
+
   try {
-    const q = String(req.query?.query || '').trim()
-    const limit = Math.min(100, Math.max(1, Number(req.query?.limit || 50)))
+    const id = Number(req.params.id)
 
-    const terms = [Number(id_empresa)]
-    let where = `
-      WHERE EXISTS (
-        SELECT 1
-        FROM reserva r
-        INNER JOIN espacio e ON e.id_espacio = r.id_espacio
-        WHERE r.id_cliente = c.id_cliente
-          AND e.id_empresa = ?
-      )
-    `
-
-    if (q) {
-      where += ' AND (c.nombre LIKE ? OR c.telefono LIKE ? OR c.correo LIKE ?)'
-      const like = `%${q}%`
-      terms.push(like, like, like)
+    if (!id) {
+      return res.status(400).json({
+        message: 'id inválido'
+      })
     }
 
-    terms.push(limit)
-
     const [rows] = await conn.query(
-      `SELECT
-          c.id_cliente,
-          c.nombre,
-          c.telefono,
-          c.correo,
-          COUNT(DISTINCT r.id_reserva) AS reservasCount,
-          COALESCE(SUM(CASE WHEN UPPER(r.estado_financiero) IN ('PENDIENTE','PARCIAL','DEUDA') THEN COALESCE(r.total,0) ELSE 0 END), 0) AS faltante,
-          SUM(CASE WHEN UPPER(r.estado_financiero) = 'DEUDA' THEN 1 ELSE 0 END) AS deudaCount,
-          SUM(CASE WHEN UPPER(r.estado_financiero) = 'PAGADO' THEN 1 ELSE 0 END) AS pagadoCount
-       FROM cliente c
-       LEFT JOIN reserva r ON r.id_cliente = c.id_cliente
-       LEFT JOIN espacio e ON e.id_espacio = r.id_espacio
-       ${where}
-       GROUP BY c.id_cliente, c.nombre, c.telefono, c.correo
-       ORDER BY c.id_cliente DESC
-       LIMIT ?`,
-      terms
+      `
+      SELECT
+        id_cliente,
+        nombre,
+        telefono,
+        correo
+      FROM cliente
+      WHERE id_cliente = ?
+      LIMIT 1
+      `,
+      [id]
     )
 
-    const clients = (rows || []).map((r) => {
-      const reservasCount = Number(r.reservasCount || 0)
-      const deudaCount = Number(r.deudaCount || 0)
-      const pagadoCount = Number(r.pagadoCount || 0)
-      const faltante = Number(r.faltante || 0)
+    if (!rows.length) {
+      return res.status(404).json({
+        message: 'Cliente no encontrado'
+      })
+    }
 
-      let estadoFinancieroResumen = 'SIN RESERVAS'
-      if (reservasCount === 0) estadoFinancieroResumen = 'SIN RESERVAS'
-      else if (deudaCount > 0) estadoFinancieroResumen = 'DEUDA'
-      else if (faltante > 0) estadoFinancieroResumen = 'PENDIENTE'
-      else if (pagadoCount > 0 && faltante === 0) estadoFinancieroResumen = 'PAGADO'
-
-      return {
-        id_cliente: Number(r.id_cliente),
-        nombre: r.nombre,
-        telefono: r.telefono,
-        correo: r.correo,
-        reservasCount,
-        faltante,
-        estadoFinancieroResumen
-      }
+    return res.json({
+      ok: true,
+      client: rows[0]
     })
-
-    return res.json({ clients })
   } catch (e) {
-    return res.status(500).json({ message: 'Error consultando clientes', error: String(e?.message || e) })
+    return res.status(500).json({
+      message: 'Error consultando cliente',
+      error: String(e?.message || e)
+    })
   } finally {
     conn.release()
   }
 })
 
+// =====================================
+// CREAR CLIENTE
+// =====================================
 reservationsRouter.post('/clients', async (req, res) => {
   const pool = getPool()
   const conn = await pool.getConnection()
-  try {
-    const { nombre, telefono, correo, cedula } = req.body || {}
-    if (!nombre || !String(nombre).trim()) return res.status(400).json({ message: 'nombre es requerido' })
 
-    const hasCedula = await hasCedulaColumn(conn)
-    let ins
-    if (hasCedula) {
-      ;[ins] = await conn.query(
-        'INSERT INTO cliente (nombre, telefono, correo, cedula) VALUES (?, ?, ?, ?)',
-        [String(nombre).trim(), telefono ? String(telefono).trim() : null, correo ? String(correo).trim() : null, cedula ? String(cedula).trim() : null]
-      )
-    } else {
-      ;[ins] = await conn.query(
-        'INSERT INTO cliente (nombre, telefono, correo) VALUES (?, ?, ?)',
-        [String(nombre).trim(), telefono ? String(telefono).trim() : null, correo ? String(correo).trim() : null]
-      )
+  try {
+    const {
+      id_cliente,
+      nombre,
+      telefono,
+      correo
+    } = req.body || {}
+
+    const idCliente = Number(id_cliente)
+
+    const nombreNorm = String(nombre || '').trim()
+    const telefonoNorm = String(telefono || '').trim()
+    const correoNorm = String(correo || '').trim()
+
+    if (!idCliente) {
+      return res.status(400).json({
+        message: 'id_cliente es requerido'
+      })
     }
 
-    const [rows] = await conn.query('SELECT id_cliente, nombre, telefono, correo FROM cliente WHERE id_cliente = ? LIMIT 1', [ins.insertId])
-    return res.status(201).json({ client: rows?.[0] || null })
+    if (!nombreNorm) {
+      return res.status(400).json({
+        message: 'nombre es requerido'
+      })
+    }
+
+    if (!telefonoNorm) {
+      return res.status(400).json({
+        message: 'telefono es requerido'
+      })
+    }
+
+    if (!correoNorm) {
+      return res.status(400).json({
+        message: 'correo es requerido'
+      })
+    }
+
+    if (!isValidPhone(telefonoNorm)) {
+      return res.status(400).json({
+        message: 'telefono inválido'
+      })
+    }
+
+    if (!isValidEmail(correoNorm)) {
+      return res.status(400).json({
+        message: 'correo inválido'
+      })
+    }
+
+    // VALIDAR SI YA EXISTE
+    const [exists] = await conn.query(
+      `
+      SELECT id_cliente
+      FROM cliente
+      WHERE id_cliente = ?
+      LIMIT 1
+      `,
+      [idCliente]
+    )
+
+    if (exists.length) {
+      return res.status(409).json({
+        message: 'Ya existe un cliente con esa cédula'
+      })
+    }
+
+    // CREAR CLIENTE
+    await conn.query(
+      `
+      INSERT INTO cliente
+      (
+        id_cliente,
+        nombre,
+        telefono,
+        correo
+      )
+      VALUES (?, ?, ?, ?)
+      `,
+      [
+        idCliente,
+        nombreNorm,
+        telefonoNorm,
+        correoNorm
+      ]
+    )
+
+    const [rows] = await conn.query(
+      `
+      SELECT
+        id_cliente,
+        nombre,
+        telefono,
+        correo
+      FROM cliente
+      WHERE id_cliente = ?
+      LIMIT 1
+      `,
+      [idCliente]
+    )
+
+    return res.status(201).json({
+      ok: true,
+      message: 'Cliente creado correctamente',
+      client: rows?.[0] || null
+    })
   } catch (e) {
-    return res.status(500).json({ message: 'Error creando cliente', error: String(e?.message || e) })
+    return res.status(500).json({
+      message: 'Error creando cliente',
+      error: String(e?.message || e)
+    })
   } finally {
     conn.release()
   }
 })
 
+// =====================================
+// ACTUALIZAR CLIENTE
+// =====================================
 reservationsRouter.put('/clients/:id', async (req, res) => {
   const pool = getPool()
   const conn = await pool.getConnection()
+
   try {
     const id = Number(req.params.id)
-    if (!id) return res.status(400).json({ message: 'id inválido' })
 
-    const { nombre, telefono, correo, cedula } = req.body || {}
-    const hasCedula = await hasCedulaColumn(conn)
-
-    const [exists] = await conn.query('SELECT id_cliente FROM cliente WHERE id_cliente = ? LIMIT 1', [id])
-    if (!exists?.length) return res.status(404).json({ message: 'Cliente no encontrado' })
-
-    if (hasCedula) {
-      await conn.query(
-        `UPDATE cliente
-         SET nombre = COALESCE(?, nombre),
-             telefono = COALESCE(?, telefono),
-             correo = COALESCE(?, correo),
-             cedula = COALESCE(?, cedula)
-         WHERE id_cliente = ?`,
-        [
-          nombre !== undefined ? String(nombre).trim() : null,
-          telefono !== undefined ? String(telefono).trim() : null,
-          correo !== undefined ? String(correo).trim() : null,
-          cedula !== undefined ? String(cedula).trim() : null,
-          id
-        ]
-      )
-    } else {
-      await conn.query(
-        `UPDATE cliente
-         SET nombre = COALESCE(?, nombre),
-             telefono = COALESCE(?, telefono),
-             correo = COALESCE(?, correo)
-         WHERE id_cliente = ?`,
-        [
-          nombre !== undefined ? String(nombre).trim() : null,
-          telefono !== undefined ? String(telefono).trim() : null,
-          correo !== undefined ? String(correo).trim() : null,
-          id
-        ]
-      )
+    if (!id) {
+      return res.status(400).json({
+        message: 'id inválido'
+      })
     }
 
-    const [rows] = await conn.query('SELECT id_cliente, nombre, telefono, correo FROM cliente WHERE id_cliente = ? LIMIT 1', [id])
-    return res.json({ client: rows?.[0] || null })
+    const {
+      nombre,
+      telefono,
+      correo
+    } = req.body || {}
+
+    const [exists] = await conn.query(
+      `
+      SELECT id_cliente
+      FROM cliente
+      WHERE id_cliente = ?
+      LIMIT 1
+      `,
+      [id]
+    )
+
+    if (!exists.length) {
+      return res.status(404).json({
+        message: 'Cliente no encontrado'
+      })
+    }
+
+    await conn.query(
+      `
+      UPDATE cliente
+      SET
+        nombre = ?,
+        telefono = ?,
+        correo = ?
+      WHERE id_cliente = ?
+      `,
+      [
+        String(nombre || '').trim(),
+        String(telefono || '').trim(),
+        String(correo || '').trim(),
+        id
+      ]
+    )
+
+    const [rows] = await conn.query(
+      `
+      SELECT
+        id_cliente,
+        nombre,
+        telefono,
+        correo
+      FROM cliente
+      WHERE id_cliente = ?
+      LIMIT 1
+      `,
+      [id]
+    )
+
+    return res.json({
+      ok: true,
+      message: 'Cliente actualizado correctamente',
+      client: rows?.[0] || null
+    })
   } catch (e) {
-    return res.status(500).json({ message: 'Error actualizando cliente', error: String(e?.message || e) })
+    return res.status(500).json({
+      message: 'Error actualizando cliente',
+      error: String(e?.message || e)
+    })
   } finally {
     conn.release()
   }
 })
-
-reservationsRouter.delete('/clients/:id', async (req, res) => {
-  const pool = getPool()
-  const conn = await pool.getConnection()
-  try {
-    const id = Number(req.params.id)
-    if (!id) return res.status(400).json({ message: 'id inválido' })
-
-    const [inUse] = await conn.query('SELECT COUNT(*) AS total FROM reserva WHERE id_cliente = ?', [id])
-    if (Number(inUse?.[0]?.total || 0) > 0) {
-      return res.status(409).json({ message: 'No se puede eliminar cliente con reservas asociadas' })
-    }
-
-    const [result] = await conn.query('DELETE FROM cliente WHERE id_cliente = ?', [id])
-    if (!result?.affectedRows) return res.status(404).json({ message: 'Cliente no encontrado' })
-    return res.json({ ok: true })
-  } catch (e) {
-    return res.status(500).json({ message: 'Error eliminando cliente', error: String(e?.message || e) })
-  } finally {
-    conn.release()
-  }
-})
-
 // ====================
 // ESPACIOS (para flujo gestor)
 // ====================
 reservationsRouter.get('/spaces', async (req, res) => {
-  const id_empresa = req.user?.id_empresa
-  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
-
   const pool = getPool()
-  const search = String(req.query?.search || '').trim()
 
   try {
-    const terms = [Number(id_empresa)]
-    let where = `
-      WHERE u.id_empresa = ?
-        AND LOWER(u.rol) = 'admin'
-    `
-    if (search) {
-      where += ' AND e.nombre LIKE ?'
-      terms.push(`%${search}%`)
-    }
+    const [rows] = await pool.query(`
+      SELECT
+        id_espacio AS id,
+        nombre,
+        capacidad,
+        precio,
+        estado,
+        id_empresa,
+        imagen
+      FROM espacio
+      WHERE id_empresa = 1
+      ORDER BY id_espacio ASC
+    `)
 
-    const [rows] = await pool.query(
-      `SELECT
-          e.id_espacio AS id,
-          e.nombre,
-          e.capacidad,
-          e.precio,
-          e.estado,
-          e.id_empresa,
-          e.imagen
-       FROM espacio e
-       INNER JOIN usuario u ON u.id_usuario = e.id_usuario
-       ${where}
-       ORDER BY e.id_espacio DESC`,
-      terms
-    )
+    console.log('ESPACIOS:', rows)
 
-    return res.json({ spaces: rows || [] })
+    return res.json({
+      ok: true,
+      spaces: rows || []
+    })
   } catch (e) {
-    try {
-      const terms = [Number(id_empresa)]
-      let where = 'WHERE id_empresa = ?'
-      if (search) {
-        where += ' AND nombre LIKE ?'
-        terms.push(`%${search}%`)
-      }
+    console.log('ERROR SPACES:', e)
 
-      const [rows] = await pool.query(
-        `SELECT id_espacio AS id, nombre, capacidad, precio, estado, id_empresa, imagen
-         FROM espacio
-         ${where}
-         ORDER BY id_espacio DESC`,
-        terms
-      )
-
-      return res.json({ spaces: rows || [] })
-    } catch (fallbackError) {
-      return res.status(500).json({ message: 'Error listando espacios', error: String(fallbackError?.message || fallbackError) })
-    }
+    return res.status(500).json({
+      ok: false,
+      message: 'Error listando espacios'
+    })
   }
 })
 
+// ====================
+// PROTEGER DEMAS RUTAS
+// ====================
+
+reservationsRouter.use(authJwt)
+reservationsRouter.use(requireRole(['gestor']))
 // ====================
 // RESERVAS
 // ====================
@@ -466,7 +514,7 @@ reservationsRouter.get('/reservations', async (req, res) => {
 
 reservationsRouter.post('/reservations', async (req, res) => {
   const id_empresa = req.user?.id_empresa
-  const id_usuario = req.user?.id || req.user?.id_usuario
+  const id_usuario = req.user?.id_usuario
   if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
   if (!id_usuario) return res.status(400).json({ message: 'id_usuario faltante en JWT' })
 
@@ -696,120 +744,3 @@ reservationsRouter.put('/reservations/:id', async (req, res) => {
   }
 })
 
-reservationsRouter.get('/dashboard', async (req, res) => {
-  const id_empresa = req.user?.id_empresa
-  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
-
-  const pool = getPool()
-  try {
-    const [activasRows] = await pool.query(
-      `SELECT COUNT(*) AS total
-       FROM reserva r
-       INNER JOIN espacio e ON e.id_espacio = r.id_espacio
-       WHERE e.id_empresa = ?
-         AND r.estado_evento IN ('COTIZACION','CONFIRMADO')`,
-      [Number(id_empresa)]
-    )
-
-    const [proximosRows] = await pool.query(
-      `SELECT COUNT(*) AS total
-       FROM reserva r
-       INNER JOIN espacio e ON e.id_espacio = r.id_espacio
-       WHERE e.id_empresa = ?
-         AND r.fecha_evento >= CURDATE()`,
-      [Number(id_empresa)]
-    )
-
-    const [cotizacionRows] = await pool.query(
-      `SELECT COUNT(*) AS total
-       FROM reserva r
-       INNER JOIN espacio e ON e.id_espacio = r.id_espacio
-       WHERE e.id_empresa = ?
-         AND r.estado_evento = 'COTIZACION'`,
-      [Number(id_empresa)]
-    )
-
-    const [confirmadosRows] = await pool.query(
-      `SELECT COUNT(*) AS total
-       FROM reserva r
-       INNER JOIN espacio e ON e.id_espacio = r.id_espacio
-       WHERE e.id_empresa = ?
-         AND r.estado_evento = 'CONFIRMADO'`,
-      [Number(id_empresa)]
-    )
-
-    const [pagosRows] = await pool.query(
-      `SELECT COUNT(*) AS total
-       FROM reserva r
-       INNER JOIN espacio e ON e.id_espacio = r.id_espacio
-       WHERE e.id_empresa = ?
-         AND r.estado_financiero IN ('PENDIENTE','PARCIAL','DEUDA')`,
-      [Number(id_empresa)]
-    )
-
-    const [recientesRows] = await pool.query(
-      `SELECT
-          r.id_reserva,
-          r.fecha_evento,
-          r.estado_evento,
-          r.estado_financiero,
-          COALESCE(c.nombre, 'Cliente') AS cliente,
-          COALESCE(es.nombre, '-') AS espacio
-       FROM reserva r
-       INNER JOIN espacio es ON es.id_espacio = r.id_espacio
-       LEFT JOIN cliente c ON c.id_cliente = r.id_cliente
-       WHERE es.id_empresa = ?
-       ORDER BY r.id_reserva DESC
-       LIMIT 8`,
-      [Number(id_empresa)]
-    )
-
-    return res.json({
-      reservasActivas: Number(activasRows?.[0]?.total || 0),
-      eventosProximos: Number(proximosRows?.[0]?.total || 0),
-      cotizacionesPendientes: Number(cotizacionRows?.[0]?.total || 0),
-      eventosConfirmados: Number(confirmadosRows?.[0]?.total || 0),
-      pagosPendientes: Number(pagosRows?.[0]?.total || 0),
-      recientes: recientesRows || []
-    })
-  } catch (e) {
-    return res.status(500).json({ message: 'Error cargando dashboard gestor', error: String(e?.message || e) })
-  }
-})
-
-reservationsRouter.delete('/reservations/:id', async (req, res) => {
-  const id_empresa = req.user?.id_empresa
-  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
-
-  const id_reserva = Number(req.params.id)
-  if (!id_reserva) return res.status(400).json({ message: 'id_reserva inválido' })
-
-  const pool = getPool()
-  const conn = await pool.getConnection()
-
-  try {
-    const [existsRows] = await conn.query(
-      `SELECT r.id_reserva
-       FROM reserva r
-       INNER JOIN espacio e ON e.id_espacio = r.id_espacio
-       WHERE r.id_reserva = ? AND e.id_empresa = ?
-       LIMIT 1`,
-      [id_reserva, Number(id_empresa)]
-    )
-    if (!existsRows?.length) return res.status(404).json({ message: 'Reserva no encontrada para tu empresa' })
-
-    await conn.beginTransaction()
-    await conn.query('DELETE FROM documento WHERE id_reserva = ?', [id_reserva])
-    await conn.query('DELETE FROM pago WHERE id_reserva = ?', [id_reserva])
-    await conn.query('DELETE FROM detalle_reserva WHERE id_reserva = ?', [id_reserva])
-    await conn.query('DELETE FROM reserva WHERE id_reserva = ?', [id_reserva])
-    await conn.commit()
-
-    return res.json({ ok: true })
-  } catch (e) {
-    await conn.rollback()
-    return res.status(500).json({ message: 'Error eliminando reserva', error: String(e?.message || e) })
-  } finally {
-    conn.release()
-  }
-})

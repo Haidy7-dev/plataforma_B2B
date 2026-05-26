@@ -22,7 +22,8 @@ export default function LoginPage() {
       const res = await axios.post(`${API_BASE}/auth/login`, { email, password })
       // backend devuelve: { token, user }
       login({ user: res.data.user, token: res.data.token })
-      navigate(rolePath(res.data.user.role))
+      const role = res.data?.user?.rol || res.data?.user?.role
+      navigate(rolePath(role))
     } catch (err) {
       const msg = err?.response?.data?.message || 'Error de login'
       setError(String(msg))

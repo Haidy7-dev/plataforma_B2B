@@ -1,660 +1,411 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+﻿import React, { useMemo, useState } from 'react'
 import PremiumRoleLayout from '../../components/layout/PremiumRoleLayout.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
-const API_BASE = '/api/gestor'
-const API_BASE_RAW = 'http://localhost:4000'
-const PLACEHOLDER_IMG = 'https://images.unsplash.com/photo-1497366811353-6870744d04b2?q=80&w=1200&auto=format&fit=crop'
-
-const fechasDisponibles = [
-  '2026-05-20',
-  '2026-05-22',
-  '2026-05-25',
-  '2026-05-28'
-]
-
-const horariosDisponibles = [
-  '08:00 - 12:00',
-  '13:00 - 17:00',
-  '18:00 - 22:00'
-]
-
-const recursosDisponibles = [
-  { id: 'r1', nombre: 'Sonido profesional', stock: 4, precio: 250000 },
-  { id: 'r2', nombre: 'Iluminación LED', stock: 6, precio: 180000 },
-  { id: 'r3', nombre: 'Pantalla gigante', stock: 2, precio: 320000 },
-  { id: 'r4', nombre: 'Sillas premium', stock: 200, precio: 15000 }
-]
-
-function EstadoBadge({ estado }) {
-  const tone =
-    estado === 'Confirmado' || estado === 'Al día' || estado === 'Disponible' || estado === 'Listo'
-      ? 'positive'
-      : estado === 'Pendiente' || estado === 'Mantenimiento' || estado === 'Borrador'
-      ? 'warning'
-      : 'info'
-
-  return <span className={`gestor-badge gestor-badge-${tone}`}>{estado}</span>
-}
-
-function KpiCard({ title, value, hint, icon, tone }) {
-  return (
-    <article className={`gestor-kpi gestor-kpi-${tone}`}>
-      <div className="gestor-kpiTop">
-        <div className="gestor-kpiTitle">{title}</div>
-        <div className="gestor-kpiIcon">{icon}</div>
-      </div>
-      <div className="gestor-kpiValue">{value}</div>
-      <div className="gestor-kpiHint">{hint}</div>
-    </article>
-  )
-}
-
-const stepLabels = [
-  'Cliente',
-  'Espacio',
-  'Fecha',
-  'Horario',
-  'Recursos',
-  'Cotización',
-  'Confirmación'
-]
+const API_BASE = 'http://localhost:4000'
+const PLACEHOLDER_IMG =
+  'https://images.unsplash.com/photo-1497366811353-6870744d04b2?q=80&w=1200&auto=format&fit=crop'
 
 export default function GestorReservasLayout() {
   const { user, token } = useAuth()
-  const navigate = useNavigate()
-  const location = useLocation()
+  const authToken = token || localStorage.getItem('token') || ''
 
-  const [dashboard, setDashboard] = useState({
-    reservasActivas: 0,
-    eventosProximos: 0,
-    cotizacionesPendientes: 0,
-    eventosConfirmados: 0,
-    pagosPendientes: 0,
-    recientes: []
-  })
-
-  const profileName = user?.name || user?.username || user?.fullname || 'Gestor'
-  const empresa = user?.empresa || user?.company || 'Empresa principal'
-  const [showFlow, setShowFlow] = useState(location.pathname.includes('/crear-reservas'))
   const [currentStep, setCurrentStep] = useState(1)
-  const [spaces, setSpaces] = useState([])
-  const [spaceSearch, setSpaceSearch] = useState('')
 
+  const [spaces] = useState([
+    {
+      id: 1,
+      nombre: 'Camping',
+      capacidad: 10,
+      precio: 100000,
+      estado: 1,
+      imagen:
+        'http://localhost:4000/uploads/espacios/espacio-1779669920690-50331668.jpg'
+    },
+    {
+      id: 2,
+      nombre: 'Glamping',
+      capacidad: 2,
+      precio: 250000,
+      estado: 1,
+      imagen:
+        'http://localhost:4000/uploads/espacios/espacio-1779669794862-229885146.jpg'
+    },
+    {
+      id: 5,
+      nombre: 'Jardin',
+      capacidad: 35,
+      precio: 570000,
+      estado: 1,
+      imagen:
+        'http://localhost:4000/uploads/espacios/espacio-1779671448808-550127642.jpg'
+    }
+  ])
+
+  // IMPORTANTE: datos de cliente se guardan temporalmente en state
+  // y se persisten al backend en el PASO 1.
   const [form, setForm] = useState({
-    cliente: '',
+    idCliente: '',
+    nombre: '',
     telefono: '',
+    correo: '',
     espacio: '',
+    idEspacio: '',
     fecha: '',
     horario: '',
-    recursos: [],
-    cotizacion: '',
-    factura: '',
-    idCliente: '',
-    idEspacio: ''
+    // marca interna para saber que paso 1 ya quedó persistido
+    clientSaved: false
   })
 
-  const [saveState, setSaveState] = useState({
-    loading: false,
-    error: '',
-    success: '',
-    reservaId: null
-  })
-
-  const today = useMemo(() => {
-    try {
-      return new Date().toLocaleDateString('es-CO', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      })
-    } catch {
-      return new Date().toDateString()
-    }
-  }, [])
-
-  useEffect(() => {
-    async function loadDashboard() {
-      try {
-        const res = await fetch(`${API_BASE}/dashboard`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) return
-
-        setDashboard({
-          reservasActivas: Number(data?.reservasActivas || 0),
-          eventosProximos: Number(data?.eventosProximos || 0),
-          cotizacionesPendientes: Number(data?.cotizacionesPendientes || 0),
-          eventosConfirmados: Number(data?.eventosConfirmados || 0),
-          pagosPendientes: Number(data?.pagosPendientes || 0),
-          recientes: Array.isArray(data?.recientes) ? data.recientes : []
-        })
-      } catch {}
-    }
-
-    if (!showFlow && location.pathname === '/gestor') loadDashboard()
-  }, [showFlow, location.pathname, token])
-
-  const links = [
-    { to: '/gestor/crear-reservas', label: 'Inicio', icon: 'bolt' },
-    
-  ]
-
-  const currentModule = useMemo(() => {
-    if (location.pathname.includes('/cotizaciones')) return 'cotizaciones'
-    if (location.pathname.includes('/facturas')) return 'facturas'
-    if (location.pathname.includes('/espacios-recursos')) return 'espacios-recursos'
-    if (location.pathname.includes('/clientes')) return 'clientes'
-    return 'crear-reservas'
-  }, [location.pathname])
+  const [loading, setLoading] = useState(false)
 
   function changeField(name, value) {
-    setForm((prev) => ({ ...prev, [name]: value }))
+    setForm((prev) => ({
+      ...prev,
+      [name]: value
+    }))
   }
 
-  function toggleRecurso(recurso) {
-    const exists = form.recursos.some((r) => r.nombre === recurso.nombre)
-    changeField(
-      'recursos',
-      exists
-        ? form.recursos.filter((r) => r.nombre !== recurso.nombre)
-        : [...form.recursos, { nombre: recurso.nombre, cantidad: 1, precio: recurso.precio }]
-    )
-  }
-
-  function changeRecursoCantidad(nombre, cantidad) {
-    const recursoBase = recursosDisponibles.find((r) => r.nombre === nombre)
-    const maxStock = Number(recursoBase?.stock || 1)
-    const qty = Math.min(maxStock, Math.max(1, Number(cantidad || 1)))
-    changeField(
-      'recursos',
-      form.recursos.map((r) => (r.nombre === nombre ? { ...r, cantidad: qty } : r))
-    )
-  }
-
-  useEffect(() => {
-    async function loadSpaces() {
-      try {
-        const qs = spaceSearch ? `?search=${encodeURIComponent(spaceSearch)}` : ''
-        const res = await fetch(`${API_BASE}/spaces${qs}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          setSpaces([])
-          return
-        }
-        setSpaces(Array.isArray(data?.spaces) ? data.spaces : [])
-      } catch {
-        setSpaces([])
-      }
-    }
-
-    if (showFlow && currentStep === 2) loadSpaces()
-  }, [showFlow, currentStep, spaceSearch, token])
-
-  const filteredSpaces = useMemo(() => {
-    const q = String(spaceSearch || '').trim().toLowerCase()
-    if (!q) return spaces
-    return spaces.filter((s) => `${s.nombre || ''} ${s.capacidad || ''}`.toLowerCase().includes(q))
-  }, [spaces, spaceSearch])
-
-  const totalCotizacion = useMemo(
-    () => form.recursos.reduce((acc, r) => acc + Number(r.precio || 0) * Number(r.cantidad || 0), 0),
-    [form.recursos]
-  )
+  const filteredSpaces = useMemo(() => spaces, [spaces])
 
   function canContinue(step) {
-    if (step === 1) return form.cliente.trim().length > 2 && form.telefono.trim().length > 6
-    if (step === 2) return Boolean(form.espacio)
+    if (step === 1) {
+      return (
+        form.idCliente.trim().length > 0 &&
+        form.nombre.trim().length > 2 &&
+        form.telefono.trim().length > 5 &&
+        form.correo.trim().length > 5
+      )
+    }
+    if (step === 2) return Boolean(form.idEspacio)
     if (step === 3) return Boolean(form.fecha)
     if (step === 4) return Boolean(form.horario)
-    if (step === 5) return form.recursos.length > 0
-    if (step === 6) return form.recursos.length > 0
     return true
   }
 
-  function nextStep() {
-    if (currentStep < 7 && canContinue(currentStep)) {
-      setCurrentStep((s) => s + 1)
+  // Usa URL absoluta al backend para evitar 404 por base/proxy de Vite
+  async function apiFetch(path, options = {}) {
+    const res = await fetch(`${API_BASE}${path}`, options)
+    const raw = await res.text()
+    let data = null
+    try {
+      data = raw ? JSON.parse(raw) : null
+    } catch {
+      data = null
+    }
+    return { res, data, raw }
+  }
+
+  async function persistClientStepOne() {
+    const idCliente = Number(form.idCliente)
+    if (!idCliente) {
+      throw new Error('Debes ingresar una cédula (id_cliente) válida.')
+    }
+
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+    }
+
+    const payload = {
+      nombre: String(form.nombre || '').trim(),
+      telefono: String(form.telefono || '').trim(),
+      correo: String(form.correo || '').trim()
+    }
+
+    // 1) Buscar si existe
+    const getResult = await apiFetch(`/gestor/clients/${idCliente}`, {
+      method: 'GET',
+      headers
+    })
+
+    if (getResult.res.status === 404) {
+      // 2a) No existe -> crear
+      const createResult = await apiFetch('/gestor/clients', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          id_cliente: idCliente,
+          ...payload
+        })
+      })
+
+      if (!createResult.res.ok) {
+        throw new Error(
+          createResult.data?.message ||
+            `Error creando cliente (HTTP ${createResult.res.status})`
+        )
+      }
+
+      const createdId = Number(createResult.data?.client?.id_cliente || 0)
+      if (!createdId) {
+        throw new Error('La API no devolvió id_cliente al crear cliente.')
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        idCliente: String(createdId),
+        clientSaved: true
+      }))
+      return createdId
+    }
+
+    if (!getResult.res.ok) {
+      throw new Error(
+        getResult.data?.message ||
+          `Error consultando cliente (HTTP ${getResult.res.status})`
+      )
+    }
+
+    // 2b) Existe -> actualizar
+    const updateResult = await apiFetch(`/gestor/clients/${idCliente}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(payload)
+    })
+
+    if (!updateResult.res.ok) {
+      throw new Error(
+        updateResult.data?.message ||
+          `Error actualizando cliente (HTTP ${updateResult.res.status})`
+      )
+    }
+
+    const updatedId = Number(updateResult.data?.client?.id_cliente || idCliente)
+    setForm((prev) => ({
+      ...prev,
+      idCliente: String(updatedId),
+      clientSaved: true
+    }))
+    return updatedId
+  }
+
+  async function nextStep() {
+    if (!canContinue(currentStep)) return
+
+    try {
+      if (currentStep === 1) {
+        setLoading(true)
+        await persistClientStepOne()
+      }
+      setCurrentStep((prev) => prev + 1)
+    } catch (err) {
+      alert(err?.message || 'No se pudo guardar el cliente.')
+    } finally {
+      if (currentStep === 1) setLoading(false)
     }
   }
 
   function prevStep() {
-    if (currentStep > 1) setCurrentStep((s) => s - 1)
+    if (currentStep > 1) setCurrentStep((prev) => prev - 1)
   }
 
-  function openFlow() {
-    setShowFlow(true)
-    setCurrentStep(1)
-    navigate('/gestor/crear-reservas')
-  }
-
-  function closeFlow() {
-    setShowFlow(false)
-    setCurrentStep(1)
-    setSaveState({ loading: false, error: '', success: '', reservaId: null })
-    navigate('/gestor')
-  }
-
-  async function confirmReserva(e) {
-    e.preventDefault()
-    if (!canContinue(6)) return
-
-    setSaveState({ loading: true, error: '', success: '', reservaId: null })
-
+  async function confirmarReserva() {
     try {
-      const payload = {
-        id_cliente: Number(form.idCliente || 0),
-        id_espacio: Number(form.idEspacio || 0),
-        fecha_evento: form.fecha,
-        horario: form.horario,
-        recursos: form.recursos.map((r) => ({ nombre: r.nombre, cantidad: Number(r.cantidad || 1) }))
+      setLoading(true)
+
+      // Cliente debe haber quedado guardado temporalmente y persistido en paso 1
+      const idCliente = Number(form.idCliente)
+      if (!idCliente || !form.clientSaved) {
+        throw new Error(
+          'Primero debes completar y guardar el cliente en el paso 1.'
+        )
       }
 
-      const res = await fetch('/api/gestor/reservations', {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      }
+
+      const [horaInicioRaw, horaFinRaw] = String(form.horario || '')
+        .split('-')
+        .map((x) => x.trim())
+
+      const reservaResult = await apiFetch('/gestor/reservations', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify(payload)
+        headers,
+        body: JSON.stringify({
+          id_cliente: idCliente,
+          id_espacio: Number(form.idEspacio),
+          fecha_evento: form.fecha,
+          hora_inicio: horaInicioRaw,
+          hora_fin: horaFinRaw
+        })
       })
 
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        throw new Error(data?.message || 'No se pudo guardar la reserva en la base de datos.')
+      if (!reservaResult.res.ok) {
+        throw new Error(
+          reservaResult.data?.message ||
+            `Error creando reserva (HTTP ${reservaResult.res.status})`
+        )
       }
 
-      setSaveState({
-        loading: false,
-        error: '',
-        success: `Reserva guardada correctamente. Total calculado: $${data?.total ?? 0}${data?.factura?.numero_factura ? ` · Factura: ${data.factura.numero_factura}` : ''}`,
-        reservaId: data?.id_reserva || null
+      alert('Reserva creada correctamente')
+
+      setCurrentStep(1)
+      setForm({
+        idCliente: '',
+        nombre: '',
+        telefono: '',
+        correo: '',
+        espacio: '',
+        idEspacio: '',
+        fecha: '',
+        horario: '',
+        clientSaved: false
       })
-      setCurrentStep(7)
     } catch (err) {
-      setSaveState({
-        loading: false,
-        error: err?.message || 'Error inesperado guardando la reserva.',
-        success: '',
-        reservaId: null
-      })
+      alert(err?.message || 'Error guardando reserva')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const kpis = [
-    { title: 'Reservas activas', value: String(dashboard.reservasActivas), hint: 'Desde BD real', icon: '📌', tone: 'primary' },
-    { title: 'Eventos próximos', value: String(dashboard.eventosProximos), hint: 'Por fecha_evento', icon: '🗓️', tone: 'info' },
-    { title: 'Cotizaciones pendientes', value: String(dashboard.cotizacionesPendientes), hint: 'estado_evento COTIZACION', icon: '🧾', tone: 'warning' },
-    { title: 'Eventos confirmados', value: String(dashboard.eventosConfirmados), hint: 'estado_evento CONFIRMADO', icon: '✅', tone: 'success' },
-    { title: 'Pagos pendientes', value: String(dashboard.pagosPendientes), hint: 'estado_financiero pendiente/parcial/deuda', icon: '💳', tone: 'danger' }
-  ]
-
   return (
-    <PremiumRoleLayout title="Gestión de Reservas y Eventos" roleLabel="Gestor" links={links}>
-      <div className="gestor-shell">
-        <section className="gestor-welcome">
+    <PremiumRoleLayout title="Gestión de Reservas" roleLabel="Gestor">
+      <section className="sa-panel">
+        <div className="sa-panelHeader">
           <div>
-            <h2>Bienvenido, {profileName}</h2>
-            <p className="gestor-welcomeSub">
-              {empresa} · {today}
-            </p>
+            <div className="sa-panelTitle">Bienvenido {user?.nombre || 'Gestor'}</div>
+            <div className="sa-panelSub">Gestión completa de reservas</div>
           </div>
+        </div>
 
-          <div className="gestor-moduleSwitch">
+        <div className="gestor-stepper">
+          <div className={`gestor-step ${currentStep === 1 ? 'active' : ''}`}>Cliente</div>
+          <div className={`gestor-step ${currentStep === 2 ? 'active' : ''}`}>Espacio</div>
+          <div className={`gestor-step ${currentStep === 3 ? 'active' : ''}`}>Fecha</div>
+          <div className={`gestor-step ${currentStep === 4 ? 'active' : ''}`}>Horario</div>
+        </div>
+
+        <form className="gestor-flowForm">
+          {currentStep === 1 && (
+            <div className="gestor-flowCard">
+              <h3>Datos del cliente</h3>
+
+              <input
+                className="input-form"
+                placeholder="Cédula (id_cliente)"
+                value={form.idCliente}
+                onChange={(e) => changeField('idCliente', e.target.value)}
+              />
+
+              <input
+                className="input-form"
+                placeholder="Nombre completo"
+                value={form.nombre}
+                onChange={(e) => changeField('nombre', e.target.value)}
+              />
+
+              <input
+                className="input-form"
+                placeholder="Teléfono"
+                value={form.telefono}
+                onChange={(e) => changeField('telefono', e.target.value)}
+              />
+
+              <input
+                className="input-form"
+                placeholder="Correo electrónico"
+                value={form.correo}
+                onChange={(e) => changeField('correo', e.target.value)}
+              />
+            </div>
+          )}
+
+          {currentStep === 2 && (
+            <div className="gestor-flowCard">
+              <div className="carousel-container">
+                {filteredSpaces.map((espacio) => {
+                  const activo = form.idEspacio === String(espacio.id)
+                  const disponible = Number(espacio.estado) === 1
+                  const imageSrc = espacio.imagen || PLACEHOLDER_IMG
+
+                  return (
+                    <div
+                      key={espacio.id}
+                      className={`card-espacio ${activo ? 'seleccionado' : ''}`}
+                      onClick={() => {
+                        changeField('espacio', espacio.nombre)
+                        changeField('idEspacio', String(espacio.id))
+                      }}
+                    >
+                      <img src={imageSrc} alt={espacio.nombre} />
+                      <h4>{espacio.nombre}</h4>
+                      <p>Capacidad {espacio.capacidad}</p>
+                      <p>Precio ${espacio.precio}</p>
+                      <p style={{ color: disponible ? '#16a34a' : '#dc2626', fontWeight: 700 }}>
+                        {disponible ? 'Disponible' : 'Ocupado'}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {currentStep === 3 && (
+            <div className="gestor-flowCard">
+              <h3>Selecciona la fecha</h3>
+              <input
+                type="date"
+                className="input-form"
+                value={form.fecha}
+                onChange={(e) => changeField('fecha', e.target.value)}
+              />
+            </div>
+          )}
+
+          {currentStep === 4 && (
+            <div className="gestor-flowCard">
+              <h3>Selecciona el horario</h3>
+              <select
+                className="input-form"
+                value={form.horario}
+                onChange={(e) => changeField('horario', e.target.value)}
+              >
+                <option value="">Selecciona horario</option>
+                <option value="08:00 - 12:00">08:00 - 12:00</option>
+                <option value="13:00 - 17:00">13:00 - 17:00</option>
+                <option value="18:00 - 22:00">18:00 - 22:00</option>
+              </select>
+            </div>
+          )}
+
+          <div className="gestor-flowActions">
             <button
               type="button"
-              className={!showFlow ? 'sa-btn sa-btnPrimary' : 'sa-btn sa-btnGhost'}
-              onClick={() => {
-                setShowFlow(false)
-                navigate('/gestor')
-              }}
+              className="sa-btn sa-btnGhost"
+              onClick={prevStep}
+              disabled={currentStep === 1}
             >
-              Inicio
+              Anterior
             </button>
-            <button type="button" className="sa-btn sa-btnPrimary" onClick={openFlow}>
-              Crear reserva
-            </button>
+
+            {currentStep < 4 && (
+              <button
+                type="button"
+                className="sa-btn sa-btnPrimary"
+                onClick={nextStep}
+                disabled={loading || !canContinue(currentStep)}
+              >
+                {loading && currentStep === 1 ? 'Guardando cliente...' : 'Siguiente'}
+              </button>
+            )}
+
+            {currentStep === 4 && (
+              <button
+                type="button"
+                className="sa-btn sa-btnPrimary"
+                onClick={confirmarReserva}
+                disabled={loading || !canContinue(4)}
+              >
+                {loading ? 'Guardando...' : 'Confirmar reserva'}
+              </button>
+            )}
           </div>
-        </section>
-
-        {!showFlow && currentModule === 'crear-reservas' && (
-          <>
-            <section className="gestor-kpiGrid">
-              {kpis.map((k) => (
-                <KpiCard key={k.title} {...k} />
-              ))}
-            </section>
-
-            <section className="sa-panel">
-              <div className="sa-panelHeader">
-                <div>
-                  <div className="sa-panelTitle">Reservas recientes</div>
-                  <div className="sa-panelSub">Información real de reservas creadas</div>
-                </div>
-              </div>
-
-              {(dashboard.recientes || []).length ? (
-                <div className="sa-liveList">
-                  {dashboard.recientes.slice(0, 8).map((r) => (
-                    <div key={r.id_reserva} className="sa-liveItem">
-                      <div className="sa-liveDot" />
-                      <div>
-                        <div className="sa-liveTitle">{r.cliente || 'Cliente'} · {r.espacio || '-'}</div>
-                        <div className="sa-liveMeta">
-                          {String(r.fecha_evento || '').slice(0, 10)} · {r.estado_evento || '-'} · {r.estado_financiero || '-'}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="sa-mutedBox">Sin reservas recientes.</div>
-              )}
-            </section>
-          </>
-        )}
-
-        {!showFlow && currentModule === 'cotizaciones' && (
-          <section className="sa-panel">
-            <div className="sa-panelHeader">
-              <div>
-                <div className="sa-panelTitle">Generar cotizaciones</div>
-                <div className="sa-panelSub">Crea cotizaciones desde reservas nuevas</div>
-              </div>
-              <button type="button" className="sa-btn sa-btnPrimary" onClick={openFlow}>
-                Crear cotización
-              </button>
-            </div>
-            <p>Utiliza el flujo de creación de reserva para definir cliente, espacio, recursos y valor de cotización.</p>
-          </section>
-        )}
-
-        {!showFlow && currentModule === 'facturas' && (
-          <section className="sa-panel">
-            <div className="sa-panelHeader">
-              <div>
-                <div className="sa-panelTitle">Generar facturas</div>
-                <div className="sa-panelSub">Registra número de factura en el paso de cotización</div>
-              </div>
-              <button type="button" className="sa-btn sa-btnPrimary" onClick={openFlow}>
-                Generar factura
-              </button>
-            </div>
-            <p>En el paso “Generar cotización” puedes ingresar el número de factura (opcional) y confirmar la reserva.</p>
-          </section>
-        )}
-
-        {!showFlow && currentModule === 'espacios-recursos' && (
-          <section className="sa-panel">
-            <div className="sa-panelHeader">
-              <div>
-                <div className="sa-panelTitle">Seleccionar espacios y recursos</div>
-                <div className="sa-panelSub">Consulta disponibilidad actual</div>
-              </div>
-            </div>
-            <div className="gestor-availabilityGrid">
-              {(spaces || []).map((esp) => {
-                const disponible = Number(esp.estado) === 1
-                const img = esp.imagen
-                  ? (String(esp.imagen).startsWith('/uploads/') ? `${API_BASE_RAW}${esp.imagen}` : esp.imagen)
-                  : PLACEHOLDER_IMG
-
-                return (
-                  <div key={esp.id} className="gestor-availabilityCard">
-                    <img src={img} alt={esp.nombre} />
-                    <div className="gestor-availabilityBody">
-                      <div className="gestor-availabilityName">{esp.nombre}</div>
-                      <div className="gestor-availabilityMeta">
-                        Capacidad {Number(esp.capacidad || 0)} · Precio ${Number(esp.precio || 0)}
-                      </div>
-                      <EstadoBadge estado={disponible ? 'Disponible' : 'Ocupado'} />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-        )}
-
-
-        {showFlow && (
-          <section className="sa-panel">
-            <div className="sa-panelHeader">
-              <div>
-                <div className="sa-panelTitle">Nuevo flujo inteligente de reserva</div>
-                <div className="sa-panelSub">Creación guiada en 7 pasos con validación visual</div>
-              </div>
-          
-            </div>
-
-            <div className="gestor-stepper">
-              {stepLabels.map((label, index) => {
-                const step = index + 1
-                const state = step < currentStep ? 'done' : step === currentStep ? 'current' : 'next'
-                return (
-                  <div key={label} className={`gestor-step gestor-step-${state}`}>
-                    <div className="gestor-stepCircle">{step}</div>
-                    <div className="gestor-stepLabel">{label}</div>
-                  </div>
-                )
-              })}
-            </div>
-
-            <form className="gestor-flowForm" onSubmit={confirmReserva}>
-              {currentStep === 1 && (
-                <div className="gestor-flowCard">
-                  <h3>Seleccionar cliente</h3>
-                  <input
-                    className="input-form"
-                    placeholder="ID cliente (Cédula)"
-                    value={form.idCliente}
-                    onChange={(e) => changeField('idCliente', e.target.value)}
-                  />
-                  <input
-                    className="input-form"
-                    placeholder="Nombre del cliente"
-                    value={form.cliente}
-                    onChange={(e) => changeField('cliente', e.target.value)}
-                  />
-                  <input
-                    className="input-form"
-                    placeholder="Teléfono de contacto"
-                    value={form.telefono}
-                    onChange={(e) => changeField('telefono', e.target.value)}
-                  />
-                </div>
-              )}
-
-              {currentStep === 2 && (
-                <div className="gestor-flowCard">
-                  <h3>Seleccionar espacio</h3>
-                  <input
-                    className="input-form"
-                    placeholder="Buscar espacio por nombre o capacidad"
-                    value={spaceSearch}
-                    onChange={(e) => setSpaceSearch(e.target.value)}
-                  />
-                  <div className="carousel-container">
-                    {filteredSpaces.map((espacio) => {
-                      const activo = form.idEspacio === String(espacio.id)
-                      const disponible = Number(espacio.estado) === 1
-                      const imageSrc = espacio.imagen
-                        ? (String(espacio.imagen).startsWith('/uploads/') ? `${API_BASE_RAW}${espacio.imagen}` : espacio.imagen)
-                        : PLACEHOLDER_IMG
-
-                      return (
-                        <div
-                          key={espacio.id}
-                          className={`card-espacio ${activo ? 'seleccionado' : ''}`}
-                          onClick={() => {
-                            changeField('espacio', espacio.nombre || '')
-                            changeField('idEspacio', String(espacio.id))
-                          }}
-                        >
-                          <img src={imageSrc} alt={espacio.nombre || 'Espacio'} />
-                          <h4>{espacio.nombre}</h4>
-                          <p>Capacidad {Number(espacio.capacidad || 0)}</p>
-                          <p>Precio ${Number(espacio.precio || 0)}</p>
-                          <p style={{ color: disponible ? '#16a34a' : '#dc2626', fontWeight: 700 }}>
-                            {disponible ? 'Disponible' : 'Ocupado'}
-                          </p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {currentStep === 3 && (
-                <div className="gestor-flowCard">
-                  <h3>Seleccionar fecha</h3>
-                  <select
-                    className="input-form"
-                    value={form.fecha}
-                    onChange={(e) => changeField('fecha', e.target.value)}
-                  >
-                    <option value="">Selecciona una fecha</option>
-                    {fechasDisponibles.map((fecha) => (
-                      <option key={fecha} value={fecha}>{fecha}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {currentStep === 4 && (
-                <div className="gestor-flowCard">
-                  <h3>Seleccionar horario</h3>
-                  <select
-                    className="input-form"
-                    value={form.horario}
-                    onChange={(e) => changeField('horario', e.target.value)}
-                  >
-                    <option value="">Selecciona un horario</option>
-                    {horariosDisponibles.map((h) => (
-                      <option key={h} value={h}>{h}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {currentStep === 5 && (
-                <div className="gestor-flowCard">
-                  <h3>Agregar recursos</h3>
-                  <div className="gestor-resourceGrid">
-                    {recursosDisponibles.map((recurso) => {
-                      const activeItem = form.recursos.find((r) => r.nombre === recurso.nombre)
-                      const active = Boolean(activeItem)
-                      return (
-                        <div key={recurso.id} className={`gestor-resourceBtn ${active ? 'active' : ''}`}>
-                          <button
-                            type="button"
-                            style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}
-                            onClick={() => toggleRecurso(recurso)}
-                          >
-                            <span>{recurso.nombre}</span>
-                            <small>Stock: {recurso.stock} · $ {recurso.precio}</small>
-                          </button>
-                          {active && (
-                            <input
-                              type="number"
-                              min="1"
-                              max={recurso.stock}
-                              className="input-form"
-                              style={{ marginTop: 8 }}
-                              value={activeItem.cantidad}
-                              onChange={(e) => changeRecursoCantidad(recurso.nombre, e.target.value)}
-                            />
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {currentStep === 6 && (
-                <div className="gestor-flowCard">
-                  <h3>Generar cotización</h3>
-                  <div className="sa-alert sa-alert-info" style={{ marginTop: 8 }}>
-                    Total automático por inventario seleccionado: <strong>${totalCotizacion}</strong>
-                  </div>
-                  <input
-                    className="input-form"
-                    placeholder="Número factura (opcional)"
-                    value={form.factura}
-                    onChange={(e) => changeField('factura', e.target.value)}
-                  />
-                </div>
-              )}
-
-              {currentStep === 7 && (
-                <div className="gestor-flowCard">
-                  <h3>Confirmar reserva</h3>
-                  <div className="gestor-confirmGrid">
-                    <div><strong>Cliente:</strong> {form.cliente}</div>
-                    <div><strong>Teléfono:</strong> {form.telefono}</div>
-                    <div><strong>Espacio:</strong> {form.espacio}</div>
-                    <div><strong>Fecha:</strong> {form.fecha}</div>
-                    <div><strong>Horario:</strong> {form.horario}</div>
-                    <div><strong>Recursos:</strong> {form.recursos.map((r) => `${r.nombre} x${r.cantidad}`).join(', ')}</div>
-                    <div><strong>Cotización:</strong> ${totalCotizacion}</div>
-                    <div><strong>Factura:</strong> {form.factura || 'N/A'}</div>
-                    <div><strong>ID Cliente (Cédula):</strong> {form.idCliente}</div>
-                    <div><strong>ID Espacio:</strong> {form.idEspacio}</div>
-                    {saveState.reservaId && <div><strong>ID Reserva (BD):</strong> {saveState.reservaId}</div>}
-                  </div>
-                  <div className="gestor-success">{saveState.success || 'Reserva confirmada correctamente.'}</div>
-                </div>
-              )}
-
-              <div className="gestor-flowActions">
-                <button type="button" className="sa-btn sa-btnGhost" onClick={prevStep} disabled={currentStep === 1}>
-                  Anterior
-                </button>
-
-                {currentStep < 6 && (
-                  <button
-                    type="button"
-                    className="sa-btn sa-btnPrimary"
-                    onClick={nextStep}
-                    disabled={!canContinue(currentStep)}
-                  >
-                    Siguiente
-                  </button>
-                )}
-
-                {currentStep === 6 && (
-                  <button
-                    type="submit"
-                    className="sa-btn sa-btnPrimary"
-                    disabled={!canContinue(6) || saveState.loading}
-                  >
-                    {saveState.loading ? 'Guardando...' : 'Confirmar reserva'}
-                  </button>
-                )}
-
-                {currentStep === 7 && (
-                  <button type="button" className="sa-btn sa-btnPrimary" onClick={closeFlow}>
-                    Finalizar
-                  </button>
-                )}
-              </div>
-
-              {saveState.error && (
-                <div className="sa-alert sa-alert-danger" style={{ marginTop: 12 }}>
-                  {saveState.error}
-                </div>
-              )}
-            </form>
-          </section>
-        )}
-      </div>
+        </form>
+      </section>
     </PremiumRoleLayout>
   )
 }
-

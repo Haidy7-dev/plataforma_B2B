@@ -1,6 +1,7 @@
-# TODO - Corrección flujo reservas Gestor
+# TODO - Corrección acceso/login sin romper perfiles
 
-- [x] Ajustar `GET /api/gestor/spaces` en `back/src/routes/reservations.js` para filtrar espacios creados por admins de la misma empresa del gestor.
-- [x] Mantener búsqueda por `search` y forma de respuesta actual.
-- [x] Incluir fallback seguro si no existe relación `espacio.id_usuario`.
-- [x] Verificar consistencia del endpoint para no afectar el frontend actual.
+- [x] Identificar causa del bloqueo de acceso tras login.
+- [x] Corregir navegación post-login en `LoginPage.jsx` usando `rol || role`.
+- [x] Hacer `rolePath` robusto en `AuthContext.jsx` (normalizar rol).
+- [x] Validar rutas por rol sin tocar inicio ni layouts de perfiles.
+- [x] Documentar resultado final.

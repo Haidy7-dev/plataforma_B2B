@@ -23,10 +23,9 @@ authRouter.post('/login', async (req, res) => {
     const t0 = Date.now()
 
     const [rows] = await pool.query(
-      'SELECT id_usuario AS id, correo AS email, rol AS role, password, id_empresa FROM usuario WHERE correo = ? AND estado = 1 LIMIT 1',
+      'SELECT id_usuario, nombre, correo, rol, password, id_empresa FROM usuario WHERE correo = ? AND estado = 1 LIMIT 1',
       [email]
     )
-
 
     if (!rows || rows.length === 0) {
       return res.status(401).json({ message: 'Credenciales inválidas' })
@@ -38,8 +37,8 @@ authRouter.post('/login', async (req, res) => {
     console.log('LOGIN_LOOKUP', {
       email: String(email),
       found: !!user,
-      userId: user?.id,
-      dbRole: user?.role
+      id_usuario: user?.id_usuario,
+      dbRole: user?.rol
     })
 
     const ok = await bcrypt.compare(password, user.password)
@@ -56,13 +55,27 @@ authRouter.post('/login', async (req, res) => {
         .replace(/_/g, '-')
     }
 
-    const normalizedRole = normalizeRole(user.role)
-    console.log('LOGIN_NORMALIZED_ROLE', { normalizedRole })
+    const normalizedRol = normalizeRole(user.rol)
+    console.log('LOGIN_NORMALIZED_ROLE', { normalizedRol })
 
-    const token = signJwt({ id: user.id, email: user.email, role: normalizedRole, id_empresa: user.id_empresa })
+    const jwtPayload = {
+      id_usuario: Number(user.id_usuario),
+      id_empresa: user.id_empresa != null ? Number(user.id_empresa) : null,
+      rol: normalizedRol,
+      nombre: user.nombre
+    }
+
+    const token = signJwt(jwtPayload)
+
     res.json({
       token,
-      user: { id: user.id, email: user.email, role: normalizedRole, id_empresa: user.id_empresa },
+      user: {
+        id_usuario: Number(user.id_usuario),
+        id_empresa: user.id_empresa != null ? Number(user.id_empresa) : null,
+        rol: normalizedRol,
+        nombre: user.nombre,
+        correo: user.correo
+      },
       ms: Date.now() - t0
     })
 

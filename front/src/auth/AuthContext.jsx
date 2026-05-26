@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState } from 'react'
+﻿import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 
 const AuthContext = createContext(null)
@@ -6,13 +6,37 @@ const AuthContext = createContext(null)
 const ROLE_PATHS = {
   'super-admin': '/super-admin',
   admin: '/admin',
-  'gestor': '/gestor',
+  gestor: '/gestor',
   logistica: '/logistica'
+}
+
+function normalizeRole(role) {
+  if (role == null) return ''
+  return String(role).trim().toLowerCase().replace(/_/g, '-')
 }
 
 export function AuthProvider({ children }) {
 
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState(() => {
+    try {
+      const raw = localStorage.getItem('auth_user')
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  })
+  const [token, setToken] = useState(() => {
+    try {
+      return localStorage.getItem('token') || ''
+    } catch {
+      return ''
+    }
+  })
+
+  useEffect(() => {
+    axios.defaults.headers.common.Authorization =
+      token ? `Bearer ${token}` : ''
+  }, [token])
 
   const api = useMemo(() => {
     return axios.create({})
@@ -21,21 +45,25 @@ export function AuthProvider({ children }) {
   const value = useMemo(
     () => ({
       user,
-      login: ({ user: u, token }) => {
-        setUser(u)
+      token,
+      login: ({ user: u, token: newToken }) => {
+        setUser(u || null)
 
-        if (token) localStorage.setItem('token', token)
+        const safeToken = newToken || ''
 
-        axios.defaults.headers.common.Authorization =
-          token ? `Bearer ${token}` : ''
+        if (safeToken) localStorage.setItem('token', safeToken)
+        if (u) localStorage.setItem('auth_user', JSON.stringify(u))
+        setToken(safeToken)
       },
 
       logout: () => {
         setUser(null)
+        setToken('')
 
         // Requested safe cleanup
         const keys = [
           'token',
+          'auth_user',
           'accessToken',
           'userData',
           'authStorage'
@@ -54,12 +82,11 @@ export function AuthProvider({ children }) {
           }
         })
 
-        axios.defaults.headers.common.Authorization = ''
       },
 
-      rolePath: (role) => ROLE_PATHS[role] || '/'
+      rolePath: (role) => ROLE_PATHS[normalizeRole(role)] || '/'
     }),
-    [user]
+    [user, token]
   )
 
   return (

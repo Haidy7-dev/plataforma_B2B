@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
+import { useAuth } from '../../../auth/AuthContext.jsx'
 
 const API_BASE = 'http://localhost:4000'
 const PLACEHOLDER_IMG = 'https://images.unsplash.com/photo-1497366811353-6870744d04b2?q=80&w=1200&auto=format&fit=crop'
@@ -44,6 +45,7 @@ function normalizeImageSrc(value) {
 }
 
 export default function AdminSpaces() {
+  const { token } = useAuth()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -67,12 +69,17 @@ export default function AdminSpaces() {
     return rows.filter((r) => `${r.nombre || ''} ${r.capacidad || ''}`.toLowerCase().includes(q))
   }, [rows, search])
 
+  function authHeaders() {
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
+
   async function fetchSpaces() {
     setLoading(true)
     setError('')
     try {
       const res = await axios.get(`${API_BASE}/admin/spaces`, {
-        params: { search: search || undefined }
+        params: { search: search || undefined },
+        headers: authHeaders()
       })
       setRows((res.data?.spaces || []).map((r) => ({
         ...r,
@@ -131,7 +138,7 @@ export default function AdminSpaces() {
       formData.append('image', file)
 
       const res = await axios.post(`${API_BASE}/admin/spaces/upload-image`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { ...authHeaders(), 'Content-Type': 'multipart/form-data' }
       })
 
       const imageUrl = String(res?.data?.imageUrl || '').trim()
@@ -165,9 +172,9 @@ export default function AdminSpaces() {
       }
 
       if (editing?.id) {
-        await axios.put(`${API_BASE}/admin/spaces/${editing.id}`, payload)
+        await axios.put(`${API_BASE}/admin/spaces/${editing.id}`, payload, { headers: authHeaders() })
       } else {
-        await axios.post(`${API_BASE}/admin/spaces`, payload)
+        await axios.post(`${API_BASE}/admin/spaces`, payload, { headers: authHeaders() })
       }
 
       setModalOpen(false)
@@ -185,7 +192,7 @@ export default function AdminSpaces() {
     setLoading(true)
     setError('')
     try {
-      await axios.delete(`${API_BASE}/admin/spaces/${row.id}`)
+      await axios.delete(`${API_BASE}/admin/spaces/${row.id}`, { headers: authHeaders() })
       await fetchSpaces()
     } catch (e) {
       setError(String(e?.response?.data?.message || e?.message || e))
@@ -232,7 +239,7 @@ export default function AdminSpaces() {
                 {filteredRows.map((r) => (
                   <div key={r.id} className="sa-card">
                     <img
-                      src={r.imagen ? `${API_BASE}${r.imagen}` : PLACEHOLDER_IMG}
+                      src={normalizeImageSrc(r.imagen)}
                       alt={r.nombre || 'Espacio'}
                       style={{
                         width: '100%',
@@ -334,7 +341,7 @@ export default function AdminSpaces() {
 
               <div style={{ gridColumn: '1 / -1' }}>
                 <img
-                  src={form.imagen ? `${API_BASE}${form.imagen}` : PLACEHOLDER_IMG}
+                  src={normalizeImageSrc(form.imagen)}
                   alt="Vista previa"
                   style={{
                     width: '100%',

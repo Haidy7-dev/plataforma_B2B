@@ -8,8 +8,10 @@ import LogisticaLayout from '../role-pages/logistica/LogisticaLayout.jsx'
 
 function RequireRole({ allowed, children }) {
   const { user } = useAuth()
+  const currentRole = String(user?.rol || user?.role || '').toLowerCase()
+
   if (!user) return <Navigate to="/login" replace />
-  if (!allowed.includes(user.role)) return <Navigate to={user ? '/' : '/login'} replace />
+  if (!allowed.includes(currentRole)) return <Navigate to={user ? '/' : '/login'} replace />
   return children
 }
 

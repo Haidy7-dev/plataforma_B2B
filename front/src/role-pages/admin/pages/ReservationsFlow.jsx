@@ -18,7 +18,7 @@ const horariosDisponibles = ['08:00 - 12:00', '13:00 - 17:00', '18:00 - 22:00']
 const stepLabels = ['Cliente', 'Espacio', 'Fecha', 'Horario', 'Recursos', 'Cotización', 'Confirmación']
 
 export default function ReservationsFlow() {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const [currentStep, setCurrentStep] = useState(1)
   const [spaces, setSpaces] = useState([])
   const [spaceSearch, setSpaceSearch] = useState('')
@@ -62,17 +62,26 @@ export default function ReservationsFlow() {
   useEffect(() => {
     async function fetchSpaces() {
       try {
-        const res = await axios.get(`${API_BASE}/admin/spaces`, {
+        const role = String(user?.rol || user?.role || '').toLowerCase()
+        const spacesEndpoint = role === 'gestor' ? '/api/reservations/spaces' : `${API_BASE}/admin/spaces`
+
+        const res = await axios.get(spacesEndpoint, {
           params: { search: spaceSearch || undefined },
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         })
-        setSpaces(Array.isArray(res?.data?.spaces) ? res.data.spaces : [])
+
+        const rawSpaces = Array.isArray(res?.data?.spaces) ? res.data.spaces : []
+        const normalized = rawSpaces.map((s) => ({
+          ...s,
+          id: s?.id ?? s?.id_espacio
+        }))
+        setSpaces(normalized)
       } catch {
         setSpaces([])
       }
     }
     fetchSpaces()
-  }, [spaceSearch, token])
+  }, [spaceSearch, token, user])
 
   const filteredSpaces = useMemo(() => {
     const q = String(spaceSearch || '').trim().toLowerCase()
@@ -87,7 +96,7 @@ export default function ReservationsFlow() {
 
   function canContinue(step) {
     if (step === 1) return form.cliente.trim().length > 2 && form.telefono.trim().length > 6
-    if (step === 2) return Boolean(form.espacio)
+    if (step === 2) return Boolean(form.idEspacio)
     if (step === 3) return Boolean(form.fecha)
     if (step === 4) return Boolean(form.horario)
     if (step === 5) return form.recursos.length > 0
@@ -126,11 +135,19 @@ export default function ReservationsFlow() {
     setSaveState({ loading: true, error: '', success: '', reservaId: null })
 
     try {
+      if (!token) {
+        throw new Error('Sesión expirada o token ausente. Inicia sesión nuevamente.')
+      }
+
+      const [horaInicioRaw, horaFinRaw] = String(form.horario || '').split('-').map((x) => x.trim())
+      const toHHMMSS = (v) => (v && /^\d{2}:\d{2}$/.test(v) ? `${v}:00` : v)
+
       const payload = {
         id_cliente: Number(form.idCliente || 0),
         id_espacio: Number(form.idEspacio || 0),
         fecha_evento: form.fecha,
-        horario: form.horario,
+        hora_inicio: toHHMMSS(horaInicioRaw),
+        hora_fin: toHHMMSS(horaFinRaw),
         recursos: form.recursos.map((r) => ({ nombre: r.nombre, cantidad: Number(r.cantidad || 1) }))
       }
 
@@ -204,10 +221,8 @@ export default function ReservationsFlow() {
               value={spaceSearch}
               onChange={(e) => setSpaceSearch(e.target.value)}
             />
-            <div className="carousel-container">
-              {filteredSpaces.length === 0 && (
-                <div className="sa-tdMuted">No hay espacios disponibles para tu empresa.</div>
-              )}
+           <div className="carousel-container">
+              
               {filteredSpaces.map((espacio) => {
                 const activo = form.idEspacio === String(espacio.id)
                 const disponible = Number(espacio.estado) === 1
