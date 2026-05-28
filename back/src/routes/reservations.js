@@ -2,6 +2,7 @@ import express from 'express'
 import { requireRole } from '../middleware/requireRole.js'
 import { authJwt } from '../middleware/authJwt.js'
 import { getPool } from '../services/mysql.js'
+import { registrarAuditoria } from '../services/auditoriaService.js'
 
 export const reservationsRouter = express.Router()
 
@@ -55,10 +56,6 @@ function isValidPhone(value) {
   return /^\d{10}$/.test(digits)
 }
 
-async function hasCedulaColumn(conn) {
-  const [rows] = await conn.query("SHOW COLUMNS FROM cliente LIKE 'cedula'")
-  return Array.isArray(rows) && rows.length > 0
-}
 
 async function normalizeResources(conn, recursos = [], id_empresa) {
   if (!Array.isArray(recursos) || recursos.length === 0) return []
@@ -333,6 +330,15 @@ reservationsRouter.post('/clients', async (req, res) => {
       [idCliente]
     )
 
+    await registrarAuditoria(conn, {
+      accion: 'CREAR_CLIENTE',
+      descripcion: `Cliente ${idCliente} creado/registrado por gestor`,
+      tabla_afectada: 'cliente',
+      id_registro: idCliente,
+      id_usuario: req.user?.id_usuario || null,
+      id_empresa: req.user?.id_empresa || null
+    })
+
     return res.status(201).json({
       ok: true,
       message: 'Cliente creado correctamente',
@@ -451,6 +457,15 @@ reservationsRouter.put('/clients/:id', async (req, res) => {
       [id]
     )
 
+    await registrarAuditoria(conn, {
+      accion: 'ACTUALIZAR_CLIENTE',
+      descripcion: `Cliente ${id} actualizado por gestor`,
+      tabla_afectada: 'cliente',
+      id_registro: id,
+      id_usuario: req.user?.id_usuario || null,
+      id_empresa: req.user?.id_empresa || null
+    })
+
     return res.json({
       ok: true,
       message: 'Cliente actualizado correctamente',
@@ -470,9 +485,15 @@ reservationsRouter.put('/clients/:id', async (req, res) => {
 // ====================
 reservationsRouter.get('/spaces', async (req, res) => {
   const pool = getPool()
+  const id_empresa = req.user?.id_empresa
+
+  if (!id_empresa) {
+    return res.status(400).json({ ok: false, message: 'id_empresa faltante en JWT' })
+  }
 
   try {
-    const [rows] = await pool.query(`
+    const [rows] = await pool.query(
+      `
       SELECT
         id_espacio AS id,
         nombre,
@@ -482,19 +503,17 @@ reservationsRouter.get('/spaces', async (req, res) => {
         id_empresa,
         imagen
       FROM espacio
-      WHERE id_empresa = 1
+      WHERE id_empresa = ?
       ORDER BY id_espacio ASC
-    `)
-
-    console.log('ESPACIOS:', rows)
+      `,
+      [Number(id_empresa)]
+    )
 
     return res.json({
       ok: true,
       spaces: rows || []
     })
   } catch (e) {
-    console.log('ERROR SPACES:', e)
-
     return res.status(500).json({
       ok: false,
       message: 'Error listando espacios'
@@ -502,12 +521,46 @@ reservationsRouter.get('/spaces', async (req, res) => {
   }
 })
 
-// ====================
-// PROTEGER DEMAS RUTAS
-// ====================
+reservationsRouter.get('/resources', async (req, res) => {
+  const pool = getPool()
+  const id_empresa = req.user?.id_empresa
 
-reservationsRouter.use(authJwt)
-reservationsRouter.use(requireRole(['gestor']))
+  if (!id_empresa) {
+    return res.status(400).json({ ok: false, message: 'id_empresa faltante en JWT' })
+  }
+
+  try {
+    const [rows] = await pool.query(
+      `
+      SELECT
+        id_recurso,
+        nombre,
+        tipo,
+        stock,
+        COALESCE(precio, 0) AS precio,
+        estado
+      FROM recurso
+      WHERE id_empresa = ?
+        AND estado = 1
+        AND stock > 0
+      ORDER BY nombre ASC, id_recurso ASC
+      `,
+      [Number(id_empresa)]
+    )
+
+    return res.json({
+      ok: true,
+      resources: rows || []
+    })
+  } catch (e) {
+    return res.status(500).json({
+      ok: false,
+      message: 'Error listando recursos',
+      error: String(e?.message || e)
+    })
+  }
+})
+
 // ====================
 // RESERVAS
 // ====================
@@ -651,6 +704,15 @@ reservationsRouter.post('/reservations', async (req, res) => {
       documentoInsertado = { id_documento: insDoc.insertId, tipo_documento: 'COTIZACION' }
     }
 
+    await registrarAuditoria(conn, {
+      accion: 'CREAR_RESERVA',
+      descripcion: `Reserva ${id_reserva} creada por gestor`,
+      tabla_afectada: 'reserva',
+      id_registro: id_reserva,
+      id_usuario: id_usuario,
+      id_empresa: id_empresa
+    })
+
     await conn.commit()
 
     return res.status(201).json({
@@ -766,6 +828,15 @@ reservationsRouter.put('/reservations/:id', async (req, res) => {
       total = calc.total
       recursosPersistidos = calc.recursos
     }
+
+    await registrarAuditoria(conn, {
+      accion: 'ACTUALIZAR_RESERVA',
+      descripcion: `Reserva ${id_reserva} actualizada por gestor`,
+      tabla_afectada: 'reserva',
+      id_registro: id_reserva,
+      id_usuario: req.user?.id_usuario || null,
+      id_empresa: id_empresa
+    })
 
     await conn.commit()
 

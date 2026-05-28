@@ -3,6 +3,8 @@ import multer from 'multer'
 import { requireRole } from '../middleware/requireRole.js'
 import { authJwt } from '../middleware/authJwt.js'
 import { dataStore } from '../services/dataStore.js'
+import { getPool } from '../services/mysql.js'
+import { registrarAuditoria } from '../services/auditoriaService.js'
 import {
   RECURSO_COLUMNS,
   parseCsvText,
@@ -13,7 +15,7 @@ import {
 export const logisticsRouter = express.Router()
 
 logisticsRouter.use(authJwt)
-logisticsRouter.use(requireRole(['logistica', 'logist', 'admin', 'superadmin']))
+logisticsRouter.use(requireRole(['logistica', 'logist', 'admin', 'superadmin', 'super_admin']))
 
 const STATUSES_ROUTE = ['pendiente', 'en curso', 'finalizada', 'retrasada']
 const STATUSES_ORDER = ['recibido', 'preparado', 'enviado', 'entregado']
@@ -33,6 +35,7 @@ const upload = multer({ storage: multer.memoryStorage() })
 
 const nowIso = () => new Date().toISOString()
 const rid = (prefix) => `${prefix}-${Math.random().toString(36).slice(2, 8)}-${Date.now().toString(36)}`
+const ESTADOS_LOGISTICA_VALIDOS = new Set(['PENDIENTE', 'PREPARADO', 'ENTREGADO'])
 
 function asNum(v, fallback = 0) {
   const n = Number(v)
@@ -143,6 +146,270 @@ function validateInventoryRow(row, existingKeySet) {
 
 logisticsRouter.get('/preparation-list', (req, res) => {
   res.json({ list: dataStore.preparationList })
+})
+
+logisticsRouter.get('/reservas-checklist', async (req, res) => {
+  const id_usuario = req.user?.id_usuario
+  const id_empresa = req.user?.id_empresa
+  const rol = String(req.user?.rol || '').trim().toLowerCase()
+
+  if (!id_usuario) return res.status(400).json({ message: 'id_usuario faltante en JWT' })
+  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
+  if (!['logistica', 'logist', 'admin', 'superadmin', 'super_admin'].includes(rol)) {
+    return res.status(403).json({ message: 'Rol no autorizado para checklist logística' })
+  }
+
+  const pool = getPool()
+  let conn
+  try {
+    console.log('[logistica][reservas-checklist] start', {
+      id_usuario,
+      id_empresa,
+      rol,
+      hasAuthHeader: Boolean(req.headers.authorization)
+    })
+    conn = await pool.getConnection()
+
+    const queryWithEstado = `
+      SELECT
+        r.id_reserva,
+        r.fecha_evento,
+        r.hora_inicio,
+        r.hora_fin,
+        c.nombre AS cliente,
+        e.nombre AS espacio,
+        dr.id_detalle,
+        dr.id_recurso,
+        dr.cantidad,
+        COALESCE(dr.estado_logistica, 'PENDIENTE') AS estado_logistica,
+        rec.nombre AS recurso
+      FROM reserva r
+      INNER JOIN espacio e ON e.id_espacio = r.id_espacio
+      LEFT JOIN cliente c ON c.id_cliente = r.id_cliente
+      INNER JOIN detalle_reserva dr ON dr.id_reserva = r.id_reserva
+      INNER JOIN recurso rec ON rec.id_recurso = dr.id_recurso
+      WHERE e.id_empresa = ?
+        AND UPPER(COALESCE(r.estado_evento, '')) <> 'CANCELADO'
+      ORDER BY
+        CASE
+          WHEN COALESCE(dr.estado_logistica, 'PENDIENTE') = 'PENDIENTE' THEN 0
+          WHEN COALESCE(dr.estado_logistica, 'PENDIENTE') = 'PREPARADO' THEN 1
+          WHEN COALESCE(dr.estado_logistica, 'PENDIENTE') = 'ENTREGADO' THEN 2
+          ELSE 3
+        END ASC,
+        r.fecha_evento ASC,
+        r.hora_inicio ASC,
+        r.id_reserva ASC,
+        dr.id_detalle ASC
+    `
+
+    const queryFallbackSinEstado = `
+      SELECT
+        r.id_reserva,
+        r.fecha_evento,
+        r.hora_inicio,
+        r.hora_fin,
+        c.nombre AS cliente,
+        e.nombre AS espacio,
+        dr.id_detalle,
+        dr.id_recurso,
+        dr.cantidad,
+        'PENDIENTE' AS estado_logistica,
+        rec.nombre AS recurso
+      FROM reserva r
+      INNER JOIN espacio e ON e.id_espacio = r.id_espacio
+      LEFT JOIN cliente c ON c.id_cliente = r.id_cliente
+      INNER JOIN detalle_reserva dr ON dr.id_reserva = r.id_reserva
+      INNER JOIN recurso rec ON rec.id_recurso = dr.id_recurso
+      WHERE e.id_empresa = ?
+        AND UPPER(COALESCE(r.estado_evento, '')) <> 'CANCELADO'
+      ORDER BY
+        0 ASC,
+        r.fecha_evento ASC,
+        r.hora_inicio ASC,
+        r.id_reserva ASC,
+        dr.id_detalle ASC
+    `
+
+    console.log('[logistica][reservas-checklist] jwt id_empresa', Number(id_empresa))
+    console.log('[logistica][reservas-checklist] SQL queryWithEstado', queryWithEstado)
+    console.log('[logistica][reservas-checklist] SQL queryFallbackSinEstado', queryFallbackSinEstado)
+
+    let rows
+    try {
+      const [primaryRows] = await conn.query(queryWithEstado, [Number(id_empresa)])
+      rows = primaryRows
+      console.log('[logistica][reservas-checklist] queryWithEstado rows', rows?.length || 0)
+      console.log('[logistica][reservas-checklist] rows raw sample', rows?.slice?.(0, 3) || [])
+    } catch (sqlErr) {
+      const code = String(sqlErr?.code || '')
+      const msg = String(sqlErr?.message || '')
+      const shouldFallback = code === 'ER_BAD_FIELD_ERROR' || /unknown column/i.test(msg)
+      if (!shouldFallback) throw sqlErr
+      console.error('[logistica][reservas-checklist] queryWithEstado failed, fallback', {
+        code: sqlErr?.code,
+        message: sqlErr?.message
+      })
+      const [fallbackRows] = await conn.query(queryFallbackSinEstado, [Number(id_empresa)])
+      rows = fallbackRows
+      console.log('[logistica][reservas-checklist] queryFallbackSinEstado rows', rows?.length || 0)
+      console.log('[logistica][reservas-checklist] fallback rows raw sample', rows?.slice?.(0, 3) || [])
+    }
+
+    const groupedMap = new Map()
+    for (const row of rows || []) {
+      const idReserva = Number(row.id_reserva)
+      if (!groupedMap.has(idReserva)) {
+        groupedMap.set(idReserva, {
+          id_reserva: idReserva,
+          cliente: row.cliente || 'Sin cliente',
+          espacio: row.espacio || 'Sin espacio',
+          fecha_evento: row.fecha_evento,
+          hora_inicio: row.hora_inicio,
+          hora_fin: row.hora_fin,
+          recursos: []
+        })
+      }
+      groupedMap.get(idReserva).recursos.push({
+        id_detalle: Number(row.id_detalle),
+        id_recurso: Number(row.id_recurso),
+        recurso: row.recurso,
+        cantidad: Number(row.cantidad || 0),
+        estado_logistica: String(row.estado_logistica || 'PENDIENTE').toUpperCase()
+      })
+    }
+
+    const reservations = Array.from(groupedMap.values()).map((reserva) => {
+      const estados = reserva.recursos.map((r) => r.estado_logistica)
+      let estado_logistica = 'PENDIENTE'
+      if (estados.length && estados.every((s) => s === 'ENTREGADO')) estado_logistica = 'ENTREGADO'
+      else if (estados.length && estados.every((s) => s !== 'PENDIENTE')) estado_logistica = 'PREPARADO'
+
+      return {
+        ...reserva,
+        estado_logistica
+      }
+    })
+
+    const recursosTotales = reservations.reduce((acc, r) => acc + (Array.isArray(r.recursos) ? r.recursos.length : 0), 0)
+    console.log('[logistica][reservas-checklist] reservations grouped', reservations.length)
+    console.log('[logistica][reservas-checklist] recursos totales', recursosTotales)
+    if (reservations.length) {
+      console.log('[logistica][reservas-checklist] sample reservation', reservations[0])
+    }
+    return res.json({ reservations })
+  } catch (e) {
+    console.error('[logistica][reservas-checklist] error', {
+      code: e?.code,
+      message: e?.message,
+      stack: e?.stack
+    })
+    return res.status(500).json({
+      message: 'Error listando checklist logístico',
+      error: String(e?.message || e),
+      sqlCode: e?.code || null
+    })
+  } finally {
+    if (conn) conn.release()
+  }
+})
+
+logisticsRouter.patch('/reservas-checklist/:idDetalle/estado', async (req, res) => {
+  const id_usuario = req.user?.id_usuario
+  const id_empresa = req.user?.id_empresa
+  const rol = String(req.user?.rol || '').trim().toLowerCase()
+  const idDetalle = Number(req.params.idDetalle)
+  const estado = String(req.body?.estado_logistica || '').trim().toUpperCase()
+
+  if (!id_usuario) return res.status(400).json({ message: 'id_usuario faltante en JWT' })
+  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
+  if (!['logistica', 'logist', 'admin', 'superadmin', 'super_admin'].includes(rol)) {
+    return res.status(403).json({ message: 'Rol no autorizado para actualizar checklist logística' })
+  }
+  if (!idDetalle) return res.status(400).json({ message: 'idDetalle inválido' })
+  if (!ESTADOS_LOGISTICA_VALIDOS.has(estado)) {
+    return res.status(400).json({ message: 'estado_logistica inválido' })
+  }
+
+  const pool = getPool()
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+
+    const [rows] = await conn.query(
+      `
+      SELECT
+        dr.id_detalle,
+        dr.estado_logistica,
+        dr.id_recurso,
+        dr.id_reserva,
+        rec.nombre AS recurso,
+        e.id_empresa
+      FROM detalle_reserva dr
+      INNER JOIN reserva r ON r.id_reserva = dr.id_reserva
+      INNER JOIN espacio e ON e.id_espacio = r.id_espacio
+      INNER JOIN recurso rec ON rec.id_recurso = dr.id_recurso
+      WHERE dr.id_detalle = ?
+      LIMIT 1
+      `,
+      [idDetalle]
+    )
+
+    if (!rows.length) {
+      await conn.rollback()
+      return res.status(404).json({ message: 'Detalle de reserva no encontrado' })
+    }
+
+    const row = rows[0]
+    if (Number(row.id_empresa) !== Number(id_empresa)) {
+      await conn.rollback()
+      return res.status(403).json({ message: 'No autorizado para este detalle de reserva' })
+    }
+
+    await conn.query(
+      'UPDATE detalle_reserva SET estado_logistica = ? WHERE id_detalle = ?',
+      [estado, idDetalle]
+    )
+
+    if (estado === 'PREPARADO' || estado === 'ENTREGADO') {
+      await registrarAuditoria(conn, {
+        accion: `LOGISTICA_${estado}`,
+        descripcion: `Usuario ${id_usuario} marcó ${estado} en reserva ${row.id_reserva}, recurso ${row.id_recurso} (${row.recurso})`,
+        tabla_afectada: 'detalle_reserva',
+        id_registro: idDetalle,
+        id_usuario: id_usuario,
+        id_empresa: id_empresa
+      })
+    }
+
+    await conn.commit()
+
+    return res.json({
+      ok: true,
+      item: {
+        id_detalle: idDetalle,
+        id_reserva: Number(row.id_reserva),
+        id_recurso: Number(row.id_recurso),
+        recurso: row.recurso,
+        estado_logistica: estado
+      }
+    })
+  } catch (e) {
+    console.error('[logistica][reservas-checklist][patch] error', {
+      idDetalle,
+      estado,
+      code: e?.code,
+      message: e?.message,
+      stack: e?.stack
+    })
+    await conn.rollback()
+    return res.status(500).json({
+      message: 'Error actualizando estado_logistica',
+      error: String(e?.message || e)
+    })
+  } finally {
+    conn.release()
+  }
 })
 
 logisticsRouter.get('/dashboard', (req, res) => {

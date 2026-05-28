@@ -9,6 +9,7 @@ const API_BASE = 'http://localhost:4000'
 function Badge({ variant, children }) {
   const cls = {
     success: 'logi-badge logi-badge-success',
+    info: 'logi-badge logi-badge-info',
     danger: 'logi-badge logi-badge-danger',
     warning: 'logi-badge logi-badge-warning',
     neutral: 'logi-badge logi-badge-neutral'
@@ -51,6 +52,11 @@ function useLogiApi() {
     try {
       const axios = (await import('axios')).default
       const token = localStorage.getItem('token')
+      console.log('[logistica][frontend] request', {
+        path,
+        method: options?.method || 'GET',
+        hasToken: Boolean(token)
+      })
       const res = await axios({
         baseURL: API_BASE,
         url: path,
@@ -62,6 +68,13 @@ function useLogiApi() {
       })
       return res.data
     } catch (e) {
+      console.error('[logistica][frontend] request error', {
+        path,
+        method: options?.method || 'GET',
+        status: e?.response?.status,
+        data: e?.response?.data,
+        message: e?.message
+      })
       const msg = String(e?.response?.data?.message || e?.message || 'Error de red')
       setError(msg)
       throw e
@@ -83,237 +96,203 @@ function Toast({ message }) {
 }
 
 function DashboardLogistica() {
-  const [activeTab, setActiveTab] = React.useState('activa')
-  const [inventory, setInventory] = React.useState([
-    { id: 1, sku: 'INV-001', name: 'Tarima estándar', qty: 24, status: 'pendiente' },
-    { id: 2, sku: 'INV-002', name: 'Caja térmica', qty: 12, status: 'listo' },
-    { id: 3, sku: 'INV-003', name: 'Etiqueta QR', qty: 180, status: 'pendiente' },
-    { id: 4, sku: 'INV-004', name: 'Precinto de seguridad', qty: 60, status: 'listo' }
-  ])
-  const [sentBatches, setSentBatches] = React.useState([])
-  const [reservations, setReservations] = React.useState([
-    { id: 'RES-100', resource: 'Muelle 2', date: 'Hoy · 15:00', status: 'disponible', holdUntil: null },
-    { id: 'RES-101', resource: 'Camión FTL-7', date: 'Hoy · 17:30', status: 'disponible', holdUntil: null },
-    { id: 'RES-102', resource: 'Zona de picking B', date: 'Mañana · 08:00', status: 'disponible', holdUntil: null }
-  ])
+  const { request, loading, error, setError } = useLogiApi()
+  const [rows, setRows] = React.useState([])
+  const [savingId, setSavingId] = React.useState(null)
+  const [q, setQ] = React.useState('')
 
-  const upcomingEvents = [
-    { id: 1, title: 'Despacho Ruta Norte', meta: 'Hoy · 16:00' },
-    { id: 2, title: 'Corte de inventario', meta: 'Hoy · 18:30' },
-    { id: 3, title: 'Consolidación de pedidos', meta: 'Mañana · 07:00' },
-    { id: 4, title: 'Recepción proveedor primario', meta: 'Mañana · 09:30' }
-  ]
+  const load = React.useCallback(async () => {
+    try {
+      const data = await request('/logistica/reservas-checklist')
+      console.log('[logistica][frontend] /logistica/reservas-checklist response', data)
+      console.log('[logistica][frontend] checklist response keys', Object.keys(data || {}))
+      const reservations = Array.isArray(data?.reservations)
+        ? data.reservations
+        : (Array.isArray(data?.reservas) ? data.reservas : [])
+      console.log('[logistica][frontend] reservations length', reservations.length)
+      if (reservations.length) {
+        console.log('[logistica][frontend] sample reservation', reservations[0])
+      }
+      setRows(reservations)
+    } catch (e) {
+      console.error('[logistica][frontend] error loading checklist', {
+        message: e?.message,
+        status: e?.response?.status,
+        data: e?.response?.data
+      })
+      throw e
+    }
+  }, [request])
 
   React.useEffect(() => {
-    const timer = setInterval(() => {
-      setReservations((prev) =>
-        prev.map((res) => {
-          if (res.status !== 'separado' || !res.holdUntil) return res
-          if (res.holdUntil <= Date.now()) {
-            return { ...res, status: 'disponible', holdUntil: null }
-          }
-          return res
-        })
-      )
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [])
+    load().catch(() => {})
+  }, [load])
 
-  const notifyBell = React.useCallback(() => {
-    window.dispatchEvent(new CustomEvent('logistica:inventory-pending'))
-  }, [])
-
-  const updateQty = (id, nextQty) => {
-    setInventory((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item
-        const parsedQty = Math.max(0, Number(nextQty) || 0)
-        if (parsedQty !== item.qty) {
-          notifyBell()
-          return { ...item, qty: parsedQty, status: 'pendiente' }
-        }
-        return item
+  const updateEstado = async (idDetalle, estado, applyOptimistic) => {
+    setSavingId(idDetalle)
+    setError('')
+    const snapshot = rows
+    if (typeof applyOptimistic === 'function') {
+      applyOptimistic()
+      console.log('[logistica][frontend] optimistic update', { idDetalle, estado })
+    }
+    try {
+      await request(`/logistica/reservas-checklist/${idDetalle}/estado`, {
+        method: 'PATCH',
+        data: { estado_logistica: estado }
       })
-    )
+      console.log('[logistica][frontend] estado actualizado', { idDetalle, estado })
+      await load()
+    } catch (e) {
+      console.error('[logistica][frontend] error updating estado', {
+        idDetalle,
+        estado,
+        message: e?.message,
+        status: e?.response?.status,
+        data: e?.response?.data
+      })
+      setRows(snapshot)
+    } finally {
+      setSavingId(null)
+    }
   }
 
-  const toggleReady = (id, checked) => {
-    setInventory((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, status: checked ? 'listo' : 'pendiente' } : item
+  const handleTogglePrepared = (reservaId, detalle, checked) => {
+    const nextEstado = checked ? 'PREPARADO' : 'PENDIENTE'
+    updateEstado(detalle.id_detalle, nextEstado, () => {
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id_reserva !== reservaId
+            ? r
+            : {
+              ...r,
+              recursos: r.recursos.map((it) =>
+                it.id_detalle === detalle.id_detalle
+                  ? { ...it, estado_logistica: nextEstado }
+                  : it
+              )
+            }
+        )
       )
-    )
+    })
   }
 
-  const sendReadyItems = () => {
-    const readyItems = inventory.filter((it) => it.status === 'listo')
-    if (readyItems.length === 0) return
-    setSentBatches((prev) => [
-      {
-        id: `ENV-${Date.now()}`,
-        sentAt: new Date().toLocaleString(),
-        items: readyItems
-      },
-      ...prev
-    ])
-    setInventory((prev) => prev.map((it) => (it.status === 'listo' ? { ...it, status: 'enviado' } : it)))
-    setActiveTab('historial')
+  const handleChangeEstado = (reservaId, detalle, estado) => {
+    updateEstado(detalle.id_detalle, estado, () => {
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id_reserva !== reservaId
+            ? r
+            : {
+              ...r,
+              recursos: r.recursos.map((it) =>
+                it.id_detalle === detalle.id_detalle
+                  ? { ...it, estado_logistica: estado }
+                  : it
+              )
+            }
+        )
+      )
+    })
   }
 
-  const separateReservation = (id) => {
-    const hold24h = Date.now() + 24 * 60 * 60 * 1000
-    setReservations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: 'separado', holdUntil: hold24h } : r))
-    )
-  }
-
-  const confirmReservation = (id) => {
-    setReservations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: 'confirmado', holdUntil: null } : r))
-    )
-  }
-
-  const cancelReservation = (id) => {
-    setReservations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: 'disponible', holdUntil: null } : r))
-    )
-  }
-
-  const getCountdown = (holdUntil) => {
-    if (!holdUntil) return '24:00:00'
-    const diff = Math.max(0, holdUntil - Date.now())
-    const h = String(Math.floor(diff / (1000 * 60 * 60))).padStart(2, '0')
-    const m = String(Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))).padStart(2, '0')
-    const s = String(Math.floor((diff % (1000 * 60)) / 1000)).padStart(2, '0')
-    return `${h}:${m}:${s}`
-  }
+  const filtered = rows.filter((r) => {
+    const text = `${r.id_reserva} ${r.cliente} ${r.espacio} ${r.fecha_evento}`.toLowerCase()
+    return text.includes(String(q || '').toLowerCase())
+  })
 
   return (
     <div className="logi-shell">
-      <div className="logi-mainGrid">
-        <div className="logi-panel">
-          <div className="logi-panelHeader">
-            <div>
-              <div className="logi-panelTitle">Checklist de Alistamiento</div>
-              <div className="logi-panelSub">Preparación activa de inventario por recurso</div>
-            </div>
-            <div className="logi-inlineTabs">
-              <button className={`logi-miniTab ${activeTab === 'activa' ? 'isActive' : ''}`} onClick={() => setActiveTab('activa')}>Preparación activa</button>
-              <button className={`logi-miniTab ${activeTab === 'historial' ? 'isActive' : ''}`} onClick={() => setActiveTab('historial')}>Consultar listas de preparación</button>
-            </div>
+      <Toast message={error ? `Error: ${error}` : ''} />
+      <div className="logi-panel">
+        <div className="logi-panelHeader">
+          <div>
+            <div className="logi-panelTitle">Checklist Operativo de Reservas</div>
+            <div className="logi-panelSub">Listado logístico por reserva con recursos, cantidades y estados</div>
           </div>
-
-          {activeTab === 'activa' ? (
-            <div className="logi-checklist">
-              {inventory.map((item) => (
-                <div key={item.id} className="logi-checkItem">
-                  <label className="logi-checkLeft">
-                    <input
-                      type="checkbox"
-                      checked={item.status === 'listo'}
-                      onChange={(e) => toggleReady(item.id, e.target.checked)}
-                      disabled={item.status === 'enviado'}
-                    />
-                    <div>
-                      <div className="logi-checkTitle">{item.name}</div>
-                      <div className="logi-checkMeta">{item.sku}</div>
-                    </div>
-                  </label>
-                  <div className="logi-checkRight">
-                    <input
-                      className="logi-qtyInput"
-                      type="number"
-                      min="0"
-                      value={item.qty}
-                      onChange={(e) => updateQty(item.id, e.target.value)}
-                    />
-                    <Badge variant={item.status === 'listo' ? 'success' : item.status === 'enviado' ? 'neutral' : 'warning'}>
-                      {item.status === 'listo' ? 'Listo' : item.status === 'enviado' ? 'Enviado' : 'Pendiente'}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-              <div className="logi-rowBtns">
-                <button className="logi-btn logi-btnPrimary" onClick={sendReadyItems}>Enviar lo que está listo</button>
-              </div>
-            </div>
-          ) : (
-            <div className="logi-historyList">
-              {sentBatches.length === 0 ? (
-                <div className="logi-emptyState">Sin envíos registrados aún.</div>
-              ) : sentBatches.map((batch) => (
-                <div key={batch.id} className="logi-historyCard">
-                  <div className="logi-historyHead">
-                    <span>{batch.id}</span>
-                    <span>{batch.sentAt}</span>
-                  </div>
-                  <ul>
-                    {batch.items.map((it) => (
-                      <li key={`${batch.id}-${it.id}`}>{it.name} · {it.qty} uds</li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="logi-panelActions">
+            <input
+              className="logi-select"
+              placeholder="Buscar reserva, cliente o espacio..."
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <button className="logi-btn logi-btnGhost" onClick={() => load().catch(() => {})}>
+              Actualizar
+            </button>
+          </div>
         </div>
 
-        <div className="logi-panel">
-          <div className="logi-panelHeader">
-            <div>
-              <div className="logi-panelTitle">Gestión de Reservas y Bloqueos</div>
-              <div className="logi-panelSub">Bloqueo temporal de 24 horas con confirmación</div>
-            </div>
-          </div>
-          <div className="logi-reservationList">
-            {reservations.map((res) => (
-              <div key={res.id} className="logi-resCard">
-                <div className="logi-resTop">
-                  <div>
-                    <div className="logi-resTitle">{res.resource}</div>
-                    <div className="logi-resMeta">{res.id} · {res.date}</div>
-                  </div>
-                  <Badge variant={res.status === 'confirmado' ? 'success' : res.status === 'separado' ? 'warning' : 'neutral'}>
-                    {res.status}
+        {loading ? (
+          <div className="logi-emptyStateCenter">Cargando checklist logístico…</div>
+        ) : filtered.length === 0 ? (
+          <div className="logi-emptyStateCenter">No hay reservas pendientes de logística</div>
+        ) : (
+          <div className="logi-operationalList">
+            {filtered.map((r) => (
+              <section key={r.id_reserva} className="logi-reservaBlock">
+                <div className="logi-reservaHead">
+                  <div className="logi-reservaTitle">RESERVA #{r.id_reserva}</div>
+                  <Badge
+                    variant={
+                      r.estado_logistica === 'ENTREGADO'
+                        ? 'success'
+                        : r.estado_logistica === 'PREPARADO'
+                          ? 'info'
+                          : 'warning'
+                    }
+                  >
+                    {r.estado_logistica}
                   </Badge>
                 </div>
 
-                {res.status === 'separado' ? (
-                  <div className="logi-countdown">Expira en {getCountdown(res.holdUntil)}</div>
-                ) : null}
-
-                <div className="logi-resActions">
-                  <button className="logi-btn logi-btnGhost" disabled={res.status !== 'disponible'} onClick={() => separateReservation(res.id)}>Separar</button>
-                  <button className="logi-btn logi-btnPrimary" disabled={res.status === 'confirmado' || res.status === 'disponible'} onClick={() => confirmReservation(res.id)}>Confirmar</button>
-                  <button className="logi-btn logi-btnGhost" disabled={res.status !== 'separado'} onClick={() => cancelReservation(res.id)}>Cancelar</button>
+                <div className="logi-reservaMetaGrid">
+                  <div><span className="logi-metaLabel">Cliente:</span> {r.cliente}</div>
+                  <div><span className="logi-metaLabel">Espacio:</span> {r.espacio}</div>
+                  <div><span className="logi-metaLabel">Fecha:</span> {String(r.fecha_evento).slice(0, 10)}</div>
+                  <div>
+                    <span className="logi-metaLabel">Horario:</span> {String(r.hora_inicio || '').slice(0, 5)} - {String(r.hora_fin || '').slice(0, 5)}
+                  </div>
                 </div>
-              </div>
+
+                <div className="logi-recursosList">
+                  {(r.recursos || []).map((det) => {
+                    const checked = det.estado_logistica === 'PREPARADO' || det.estado_logistica === 'ENTREGADO'
+                    return (
+                        <div key={det.id_detalle} className="logi-recursoRow">
+                        <label className="logi-recursoCheck">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => handleTogglePrepared(r.id_reserva, det, e.target.checked)}
+                            disabled={savingId === det.id_detalle || det.estado_logistica === 'ENTREGADO'}
+                          />
+                          <span>{det.cantidad} {det.recurso}</span>
+                        </label>
+
+                        <div className="logi-recursoActions">
+                          <select
+                            className="logi-select logi-stateSelect"
+                            value={det.estado_logistica}
+                            onChange={(e) => handleChangeEstado(r.id_reserva, det, e.target.value)}
+                            disabled={savingId === det.id_detalle}
+                          >
+                            <option value="PENDIENTE">PENDIENTE</option>
+                            <option value="PREPARADO">PREPARADO</option>
+                            <option value="ENTREGADO">ENTREGADO</option>
+                          </select>
+                          <span className={`logi-statusPill logi-status-${String(det.estado_logistica || '').toLowerCase()}`}>
+                            {det.estado_logistica}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
             ))}
           </div>
-        </div>
-      </div>
-
-      <div className="logi-panel logi-eventsPanel">
-        <div className="logi-panelHeader">
-          <div>
-            <div className="logi-panelTitle">Eventos Próximos</div>
-            <div className="logi-panelSub">Cronograma logístico inmediato</div>
-          </div>
-        </div>
-        <div className="logi-eventList">
-          {upcomingEvents.map((event, idx) => (
-            <div key={event.id} className="logi-eventItem">
-              <div className="logi-eventLine">
-                <span className="logi-eventDot" />
-                {idx < upcomingEvents.length - 1 ? <span className="logi-eventConnector" /> : null}
-              </div>
-              <div className="logi-eventContent">
-                <div className="logi-eventTitle">{event.title}</div>
-                <div className="logi-eventMeta">{event.meta}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+        )}
       </div>
     </div>
   )
