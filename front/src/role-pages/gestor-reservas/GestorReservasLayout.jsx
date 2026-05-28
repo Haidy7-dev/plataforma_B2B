@@ -1,4 +1,5 @@
 ﻿﻿import React, { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import PremiumRoleLayout from '../../components/layout/PremiumRoleLayout.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
@@ -38,6 +39,7 @@ function buildDefaultRanges() {
 }
 
 export default function GestorReservasLayout() {
+  const navigate = useNavigate()
   const { token } = useAuth()
   const authToken = token || localStorage.getItem('token') || ''
 
@@ -155,18 +157,32 @@ export default function GestorReservasLayout() {
   }
 
   async function request(path, options = {}) {
-    const response = await fetch(`${API_BASE}${path}`, {
-      method: options.method || 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-        ...(options.headers || {})
-      },
-      body: options.body ? JSON.stringify(options.body) : undefined
-    })
+    const normalizedPath = String(path || '').startsWith('/api/')
+      ? String(path || '')
+      : `/api${String(path || '').startsWith('/') ? String(path || '') : `/${String(path || '')}`}`
+
+    let response
+    try {
+      response = await fetch(normalizedPath, {
+        method: options.method || 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          ...(options.headers || {})
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined
+      })
+    } catch {
+      throw new Error('No se pudo conectar con el servidor. Verifica que el backend esté activo en puerto 4000.')
+    }
 
     const data = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(data?.message || 'Error en la solicitud')
+    if (!response.ok) {
+      const backendMessage = String(data?.message || data?.error || '').trim()
+      const statusInfo = response?.status ? ` (HTTP ${response.status})` : ''
+      throw new Error(backendMessage || `Error en la solicitud${statusInfo}`)
+    }
+
     return data
   }
 
@@ -175,7 +191,7 @@ export default function GestorReservasLayout() {
       if (!authToken) return
       setLoadingSpaces(true)
       try {
-        const data = await request('/reservations/spaces')
+        const data = await request('/gestor/spaces')
         const normalized = (data?.spaces || []).map((s) => ({
           id: Number(s?.id ?? s?.id_espacio),
           nombre: s?.nombre || '',
@@ -199,7 +215,7 @@ export default function GestorReservasLayout() {
       if (!authToken) return
       setLoadingResources(true)
       try {
-        const data = await request('/reservations/resources')
+        const data = await request('/gestor/resources')
         const normalized = (data?.resources || []).map(normalizeResourceFromApi)
         setResources(normalized)
       } catch {
@@ -273,10 +289,10 @@ export default function GestorReservasLayout() {
       }
 
       try {
-        await request('/reservations/clients', { method: 'POST', body: payload })
+        await request('/gestor/clients', { method: 'POST', body: payload })
       } catch (postErr) {
         if (String(postErr?.message || '').toLowerCase().includes('ya existe')) {
-          await request(`/reservations/clients/${idCliente}`, {
+          await request(`/gestor/clients/${idCliente}`, {
             method: 'PUT',
             body: {
               nombre: payload.nombre,
@@ -334,16 +350,18 @@ export default function GestorReservasLayout() {
         recursos: recursosPayload
       }
 
-      const data = await request('/reservations/reservations', {
+      await request('/gestor/reservations', {
         method: 'POST',
         body: payload
       })
 
       setUiMessage({
         type: 'success',
-        text: `Reserva creada correctamente${data?.id_reserva ? ` (ID ${data.id_reserva})` : ''}.`
+        text: 'Reserva creada correctamente'
       })
-      setCurrentStep(6)
+      setTimeout(() => {
+        navigate('/gestor')
+      }, 900)
     } catch (e) {
       setUiMessage({ type: 'error', text: String(e?.message || 'No se pudo crear la reserva.') })
     } finally {

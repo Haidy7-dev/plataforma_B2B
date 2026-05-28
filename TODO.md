@@ -1,18 +1,22 @@
-# TODO - Flujo de reservas Gestor (Recursos + persistencia detalle_reserva)
+# TODO - Corrección error "Error en la solicitud" y estabilización del flujo Gestor
 
-- [x] 1. Completar `front/src/role-pages/gestor-reservas/GestorReservasLayout.jsx`
-  - [x] Definir flujo de 6 pasos: Cliente → Espacio → Fecha → Horario → Recursos → Confirmar.
-  - [x] Integrar carga real de espacios (`GET /reservations/spaces`).
-  - [x] Integrar carga real de recursos (`GET /reservations/resources`).
-  - [x] Implementar selección múltiple de recursos con cantidad editable.
-  - [x] Validar cantidades ( > 0 si seleccionado, <= stock ) y permitir reserva sin recursos.
-  - [x] Enviar payload de recursos como `{ id_recurso, cantidad }` en `POST /reservations/reservations`.
-  - [x] Reemplazar alertas por mensajes visuales (éxito/error) en UI.
+- [x] 1. Diagnóstico de enrutamiento Front/Back
+  - [x] Revisar `back/src/server.js` y confirmar prefijos reales de API.
+  - [x] Revisar `back/src/routes/index.js` para validar base de rutas (`/gestor`, etc.).
+  - [x] Revisar `front/src/role-pages/gestor-reservas/GestorReservasLayout.jsx` para identificar construcción de URLs.
 
-- [ ] 2. Ajuste mínimo de compatibilidad en `front/src/role-pages/admin/pages/ReservationsFlow.jsx`
-  - [ ] Mantener funcionamiento actual sin romper.
-  - [ ] Asegurar formato compatible de recursos si el flujo se reutiliza.
+- [x] 2. Corregir conectividad en desarrollo (Vite)
+  - [x] Editar `front/vite.config.js` para agregar proxy de `/api` hacia `http://localhost:4000`.
 
-- [ ] 3. Verificación de integración con logística (sin nuevos endpoints/tablas)
-  - [ ] Confirmar que los datos persisten en `detalle_reserva` a través del backend existente.
-  - [ ] Confirmar que logística muestra automáticamente reserva, cliente, espacio, fecha, hora, recursos y cantidades usando su consulta actual.
+- [x] 3. Mejorar manejo de errores HTTP/red en Gestor
+  - [x] Editar `request()` en `front/src/role-pages/gestor-reservas/GestorReservasLayout.jsx`.
+  - [x] Manejar explícitamente errores de red (backend caído / CORS / proxy ausente).
+  - [x] Propagar mensaje del backend cuando exista (`message` / `error`) y no solo mensaje genérico.
+
+- [x] 4. Ajustar flujo de confirmación de reserva
+  - [x] Corregir acciones del paso final para que la creación ocurra en la etapa de confirmación y no quede bloqueada por el stepper.
+  - [x] Mantener UX consistente para "Nueva reserva".
+
+- [ ] 5. Verificación final
+  - [ ] Validar que cargas de espacios/recursos funcionen sin "Error en la solicitud".
+  - [ ] Validar creación de cliente y creación de reserva en flujo completo.
