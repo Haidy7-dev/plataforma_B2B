@@ -38,6 +38,13 @@ export function getPool() {
     password: process.env.MYSQL_PASSWORD,
     database: process.env.MYSQL_DATABASE,
 
+    // Evita problemas de codificación (ej: "Port�til") forzando UTF-8 real (utf8mb4)
+    charset: 'utf8mb4',
+    // Algunas collations/servidores requieren NAMES explícito; mysql2 lo respeta con charset,
+    // pero si tu servidor está mal configurado, esto reduce el riesgo.
+    // (Si necesitas aún más control, se puede agregar SET NAMES por conexión.)
+    // supportBigNumbers: true,
+
     // Falla más rápido si el host no responde (evita ETIMEDOUT poco claro)
     connectTimeout: Number(process.env.MYSQL_CONNECT_TIMEOUT_MS || 5000),
     waitForConnections: true,

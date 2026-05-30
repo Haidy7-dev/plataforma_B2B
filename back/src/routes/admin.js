@@ -409,104 +409,322 @@ adminRouter.get('/dashboard/stats', async (req, res) => {
 
 adminRouter.get('/reports/summary', async (req, res) => {
   const id_empresa = req.user?.id_empresa
+  // ====== LOGS TEMPORALES (diagnóstico) ======
+  console.log('[ADMIN/REPORTS/summary] JWT payload:', {
+    hasUser: Boolean(req.user),
+    id_empresa: id_empresa ?? null,
+    reqUserKeys: req.user ? Object.keys(req.user) : []
+  })
+
   if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
 
   const pool = getPool()
-  try {
-    const [incRows] = await pool.query(
-      'SELECT COUNT(*) AS total FROM incidente WHERE id_empresa = ?',
-      [Number(id_empresa)]
-    )
+  const idEmpresaNum = Number(id_empresa)
 
-    const [finRows] = await pool.query(
-      `SELECT
+  const runStep = async (stepName, fn) => {
+    try {
+      return await fn()
+    } catch (err) {
+      // adjuntamos contexto del paso para que sea 100% rastreable
+      const e = err || new Error('Unknown error')
+      console.error(`[ADMIN/REPORTS/summary] FAILED STEP: ${stepName}`, {
+        message: e?.message || String(e),
+        code: e?.code || null,
+        errno: e?.errno || null,
+        sqlState: e?.sqlState || null
+      })
+      throw new Error(`STEP:${stepName} | ${e?.message || String(e)}`)
+    }
+  }
+
+  try {
+    // 1) Incidencias (ok)
+    const [incRows] = await runStep('incidencias:SELECT_COUNT_incidente_por_empresa', async () =>
+      pool.query(
+        `
+        SELECT COUNT(*) AS total
+        FROM incidente i
+        `
+      )
+    )
+    console.log('[ADMIN/REPORTS/summary] incidencias:', incRows?.[0]?.total ?? 0)
+
+    // 2) Conteos por estado de evento (COTIZACION/CONFIRMADO/FINALIZADO/CANCELADO)
+    const [estadoEventoRows] = await runStep('estado_evento:GROUPBY_reserva_espacio', async () =>
+      pool.query(
+        `
+        SELECT
+          COALESCE(r.estado_evento, 'COTIZACION') AS estado_evento,
+          COUNT(*) AS total
+        FROM reserva r
+        INNER JOIN espacio es ON es.id_espacio = r.id_espacio
+        WHERE es.id_empresa = ?
+        GROUP BY COALESCE(r.estado_evento, 'COTIZACION')
+        `,
+        [idEmpresaNum]
+      )
+    )
+    console.log('[ADMIN/REPORTS/summary] estado_evento rows count:', (estadoEventoRows || []).length)
+
+    const reservasPorEstado = {
+      COTIZACION: 0,
+      CONFIRMADO: 0,
+      FINALIZADO: 0,
+      CANCELADO: 0
+    }
+    ;(estadoEventoRows || []).forEach((r) => {
+      const key = String(r.estado_evento || '').toUpperCase()
+      if (reservasPorEstado[key] !== undefined) reservasPorEstado[key] = Number(r.total || 0)
+    })
+
+    // 3) Conteos financieros (pendiente/parcial/pagado/deuda) por cantidad (como antes)
+    const [finRows] = await runStep('financieros:GROUPBY_estado_financiero', async () =>
+      pool.query(
+        `
+        SELECT
           COALESCE(r.estado_financiero, 'PENDIENTE') AS estado_financiero,
           COUNT(*) AS total
-       FROM reserva r
-       INNER JOIN espacio es ON es.id_espacio = r.id_espacio
-       WHERE es.id_empresa = ?
-       GROUP BY COALESCE(r.estado_financiero, 'PENDIENTE')`,
-      [Number(id_empresa)]
+        FROM reserva r
+        INNER JOIN espacio es ON es.id_espacio = r.id_espacio
+        WHERE es.id_empresa = ?
+        GROUP BY COALESCE(r.estado_financiero, 'PENDIENTE')
+        `,
+        [idEmpresaNum]
+      )
     )
 
-    const [totRows] = await pool.query(
-      `SELECT COUNT(*) AS total
-       FROM reserva r
-       INNER JOIN espacio es ON es.id_espacio = r.id_espacio
-       WHERE es.id_empresa = ?`,
-      [Number(id_empresa)]
-    )
-
-    const [finEventsRows] = await pool.query(
-      `SELECT COUNT(*) AS total
-       FROM reserva r
-       INNER JOIN espacio es ON es.id_espacio = r.id_espacio
-       WHERE es.id_empresa = ? AND r.estado_evento = 'FINALIZADO'`,
-      [Number(id_empresa)]
-    )
-
-    const [unpaidRows] = await pool.query(
-      `SELECT
-          r.id_reserva,
-          COALESCE(c.nombre, 'Cliente') AS cliente,
-          COALESCE(es.nombre, '-') AS espacio,
-          r.fecha_evento,
-          r.hora_inicio,
-          r.hora_fin,
-          COALESCE(r.estado_evento, 'COTIZACION') AS estado_evento,
-          COALESCE(r.estado_financiero, 'PENDIENTE') AS estado_financiero,
-          COALESCE(r.total, 0) AS total
-       FROM reserva r
-       INNER JOIN espacio es ON es.id_espacio = r.id_espacio
-       LEFT JOIN cliente c ON c.id_cliente = r.id_cliente
-       WHERE es.id_empresa = ?
-         AND COALESCE(r.estado_financiero, 'PENDIENTE') IN ('PENDIENTE', 'DEUDA')
-       ORDER BY r.fecha_evento ASC, r.id_reserva ASC
-       LIMIT 20`,
-      [Number(id_empresa)]
-    )
-
-    const [upcomingRows] = await pool.query(
-      `SELECT
-          r.id_reserva,
-          COALESCE(c.nombre, 'Cliente') AS cliente,
-          COALESCE(es.nombre, '-') AS espacio,
-          r.fecha_evento,
-          r.hora_inicio,
-          r.hora_fin,
-          COALESCE(r.estado_evento, 'COTIZACION') AS estado_evento,
-          COALESCE(r.estado_financiero, 'PENDIENTE') AS estado_financiero,
-          COALESCE(r.total, 0) AS total
-       FROM reserva r
-       INNER JOIN espacio es ON es.id_espacio = r.id_espacio
-       LEFT JOIN cliente c ON c.id_cliente = r.id_cliente
-       WHERE es.id_empresa = ?
-       ORDER BY r.fecha_evento ASC, r.id_reserva ASC
-       LIMIT 20`,
-      [Number(id_empresa)]
-    )
-
-    const totalsByFinancial = {
+    const financieros = {
       PENDIENTE: 0,
       PARCIAL: 0,
       PAGADO: 0,
       DEUDA: 0
     }
-
     ;(finRows || []).forEach((r) => {
       const key = String(r.estado_financiero || '').toUpperCase()
-      if (totalsByFinancial[key] !== undefined) totalsByFinancial[key] = Number(r.total || 0)
+      if (financieros[key] !== undefined) financieros[key] = Number(r.total || 0)
     })
 
+    // 4) Totales
+    const [totRows] = await runStep('totales:COUNT_reserva_por_empresa', async () =>
+      pool.query(
+        `
+        SELECT COUNT(*) AS total
+        FROM reserva r
+        INNER JOIN espacio es ON es.id_espacio = r.id_espacio
+        WHERE es.id_empresa = ?
+        `,
+        [idEmpresaNum]
+      )
+    )
+
     const totalReservas = Number(totRows?.[0]?.total || 0)
-    const totalFinalizadas = Number(finEventsRows?.[0]?.total || 0)
+
+    // Cumplimiento = FINALIZADO / total reservas (mantener lógica actual)
+    const totalFinalizadas = Number(reservasPorEstado.FINALIZADO || 0)
     const cumplimiento = totalReservas > 0 ? Math.round((totalFinalizadas / totalReservas) * 100) : 0
 
+    // 5) Reservas pendientes/confirmadas/finalizadas/canceladas (según estado_evento)
+    const reservasPendientes = reservasPorEstado.COTIZACION + reservasPorEstado.CONFIRMADO // negocio: pendientes = no finalizadas/no canceladas
+    const reservasConfirmadas = reservasPorEstado.CONFIRMADO
+    const reservasFinalizadas = reservasPorEstado.FINALIZADO
+    const reservasCanceladas = reservasPorEstado.CANCELADO
+
+    // 6) Estado financiero: total recaudado, pagos pendientes, estado financiero por reservas
+    // Recaudado = SUM(pago.monto) por empresa (vía reserva->espacio)
+    const [recaudadoRows] = await runStep('finanzas:SUM_pago_monto', async () =>
+      pool.query(
+        `
+        SELECT COALESCE(SUM(p.monto),0) AS recaudado
+        FROM pago p
+        INNER JOIN reserva r ON r.id_reserva = p.id_reserva
+        INNER JOIN espacio es ON es.id_espacio = r.id_espacio
+        WHERE es.id_empresa = ?
+        `,
+        [idEmpresaNum]
+      )
+    )
+    const recaudado = Number(recaudadoRows?.[0]?.recaudado || 0)
+
+    // Pagos pendientes = SUM(reserva.total) - SUM(pago.monto) (simplificado)
+    const [totalReservaRows] = await runStep('finanzas:SUM_reserva_total', async () =>
+      pool.query(
+        `
+        SELECT COALESCE(SUM(r.total),0) AS totalReserva
+        FROM reserva r
+        INNER JOIN espacio es ON es.id_espacio = r.id_espacio
+        WHERE es.id_empresa = ?
+        `,
+        [idEmpresaNum]
+      )
+    )
+    const totalReservaMonto = Number(totalReservaRows?.[0]?.totalReserva || 0)
+    const pagosPendientes = Math.max(0, totalReservaMonto - recaudado)
+
+    console.log('[ADMIN/REPORTS/summary] recaudado/pagosPendientes:', { recaudado, pagosPendientes })
+
+    // 7) Pagos pendientes por reserva (lista)
+    const [pagosPendientesRows] = await runStep('finanzas:pagos_pendientes_lista', async () =>
+      pool.query(
+        `
+        SELECT
+          r.id_reserva,
+          COALESCE(c.nombre,'Cliente') AS cliente,
+          COALESCE(es.nombre,'-') AS espacio,
+          r.fecha_evento,
+          COALESCE(r.total,0) AS total,
+          COALESCE(SUM(p.monto),0) AS pagado,
+          (COALESCE(r.total,0) - COALESCE(SUM(p.monto),0)) AS pendiente_monto
+        FROM reserva r
+        INNER JOIN espacio es ON es.id_espacio = r.id_espacio
+        LEFT JOIN cliente c ON c.id_cliente = r.id_cliente
+        LEFT JOIN pago p ON p.id_reserva = r.id_reserva
+        WHERE es.id_empresa = ?
+        GROUP BY r.id_reserva, c.nombre, es.nombre, r.fecha_evento, r.total
+        HAVING (COALESCE(r.total,0) - COALESCE(SUM(p.monto),0)) > 0
+        ORDER BY r.fecha_evento ASC, r.id_reserva ASC
+        LIMIT 20
+        `,
+        [idEmpresaNum]
+      )
+    )
+
+    // 8) Recursos utilizados (agregado por recurso) vía detalle_reserva->recurso
+    const [recursosUtilizadosRows] = await runStep('recursos:detalle_reserva_sum_cantidad_subtotal', async () =>
+      pool.query(
+        `
+        SELECT
+          dr.id_recurso,
+          COALESCE(r.nombre,'Recurso') AS recurso,
+          COALESCE(SUM(dr.cantidad),0) AS cantidad_utilizada,
+          COALESCE(SUM(dr.subtotal),0) AS subtotal_utilizado
+        FROM detalle_reserva dr
+        INNER JOIN reserva res ON res.id_reserva = dr.id_reserva
+        INNER JOIN espacio es ON es.id_espacio = res.id_espacio
+        INNER JOIN recurso r ON r.id_recurso = dr.id_recurso
+        WHERE es.id_empresa = ?
+        GROUP BY dr.id_recurso, r.nombre
+        ORDER BY cantidad_utilizada DESC, dr.id_recurso DESC
+        LIMIT 10
+        `,
+        [idEmpresaNum]
+      )
+    )
+
+    // 9) Historial de reservas (opcional para la UI actual)
+    // AdminReports.jsx NO consume historialReservas, así que NO debemos romper todo el endpoint
+    // si la vista vw_historial_reservas_admin no existe o no coincide con el esquema.
+    let historialRows = []
+    try {
+      const [rows] = await pool.query(
+        `
+        SELECT *
+        FROM vw_historial_reservas_admin
+        WHERE id_empresa = ?
+        ORDER BY fecha DESC
+        LIMIT 50
+        `,
+        [idEmpresaNum]
+      )
+      historialRows = rows || []
+      console.log('[ADMIN/REPORTS/summary] historial rows count:', (historialRows || []).length)
+    } catch (e) {
+      console.warn('[ADMIN/REPORTS/summary] vw_historial_reservas_admin falló, continuando sin historial:', {
+        message: e?.message || String(e)
+      })
+      historialRows = []
+    }
+
+    // 10) Mantener secciones existentes para compatibilidad (unpaidReservations/upcomingEvents)
+    const [unpaidRows] = await runStep('ui:unpaidReservations', async () =>
+      pool.query(
+        `
+        SELECT
+          r.id_reserva,
+          COALESCE(c.nombre, 'Cliente') AS cliente,
+          COALESCE(es.nombre, '-') AS espacio,
+          r.fecha_evento,
+          r.hora_inicio,
+          r.hora_fin,
+          COALESCE(r.estado_evento, 'COTIZACION') AS estado_evento,
+          COALESCE(r.estado_financiero, 'PENDIENTE') AS estado_financiero,
+          COALESCE(r.total, 0) AS total
+        FROM reserva r
+        INNER JOIN espacio es ON es.id_espacio = r.id_espacio
+        LEFT JOIN cliente c ON c.id_cliente = r.id_cliente
+        WHERE es.id_empresa = ?
+          AND COALESCE(r.estado_financiero, 'PENDIENTE') IN ('PENDIENTE', 'DEUDA')
+        ORDER BY r.fecha_evento ASC, r.id_reserva ASC
+        LIMIT 20
+        `,
+        [idEmpresaNum]
+      )
+    )
+
+    const [upcomingRows] = await runStep('ui:upcomingEvents', async () =>
+      pool.query(
+        `
+        SELECT
+          r.id_reserva,
+          COALESCE(c.nombre, 'Cliente') AS cliente,
+          COALESCE(es.nombre, '-') AS espacio,
+          r.fecha_evento,
+          r.hora_inicio,
+          r.hora_fin,
+          COALESCE(r.estado_evento, 'COTIZACION') AS estado_evento,
+          COALESCE(r.estado_financiero, 'PENDIENTE') AS estado_financiero,
+          COALESCE(r.total, 0) AS total
+        FROM reserva r
+        INNER JOIN espacio es ON es.id_espacio = r.id_espacio
+        LEFT JOIN cliente c ON c.id_cliente = r.id_cliente
+        WHERE es.id_empresa = ?
+          AND r.fecha_evento >= CURDATE()
+        ORDER BY r.fecha_evento ASC, r.id_reserva ASC
+        LIMIT 20
+        `,
+        [idEmpresaNum]
+      )
+    )
+
     return res.json({
+      // métricas existentes
       incidencias: Number(incRows?.[0]?.total || 0),
       cumplimiento,
       totalReservas,
-      financieros: totalsByFinancial,
+      financieros,
+
+      // métricas nuevas requeridas por AdminReports
+      reservasPorEstado,
+      reservasPendientes,
+      reservasConfirmadas,
+      reservasFinalizadas,
+      reservasCanceladas,
+
+      estadoFinanciero: {
+        recaudado,
+        totalReserva: totalReservaMonto,
+        pagosPendientes
+      },
+
+      pagosPendientes: (pagosPendientesRows || []).map((r) => ({
+        id_reserva: r.id_reserva,
+        cliente: r.cliente,
+        espacio: r.espacio,
+        fecha_evento: r.fecha_evento,
+        total: Number(r.total || 0),
+        pagado: Number(r.pagado || 0),
+        pendiente_monto: Number(r.pendiente_monto || 0)
+      })),
+
+      recursosUtilizados: (recursosUtilizadosRows || []).map((r) => ({
+        id_recurso: r.id_recurso,
+        recurso: r.recurso,
+        cantidad_utilizada: Number(r.cantidad_utilizada || 0),
+        subtotal_utilizado: Number(r.subtotal_utilizado || 0)
+      })),
+
+      historialReservas: (historialRows || []).map((row) => row),
+
+      // compatibilidad con la UI actual del archivo AdminReports.jsx
       unpaidReservations: (unpaidRows || []).map((r) => ({
         id_reserva: r.id_reserva,
         cliente: r.cliente,
@@ -531,7 +749,16 @@ adminRouter.get('/reports/summary', async (req, res) => {
       }))
     })
   } catch (e) {
-    return res.status(500).json({ message: 'Error cargando reportes', error: String(e?.message || e) })
+    console.error('[ADMIN/REPORTS/summary] ERROR:', {
+      message: e?.message || String(e),
+      // intentar incluir más datos si existe
+      stack: e?.stack || null
+    })
+    return res.status(500).json({
+      message: 'Error cargando reportes',
+      error: String(e?.message || e),
+      step: e?.message?.startsWith('STEP:') ? e.message : null
+    })
   }
 })
 

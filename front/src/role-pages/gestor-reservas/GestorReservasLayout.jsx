@@ -18,10 +18,17 @@ function toYmdLocal(value) {
   return `${y}-${m}-${d}`
 }
 
-function splitScheduleRange(horario) {
-  const [rawStart, rawEnd] = String(horario || '').split('-').map((x) => x.trim())
-  const normalize = (v) => (/^\d{2}:\d{2}$/.test(v || '') ? `${v}:00` : v)
-  return { hora_inicio: normalize(rawStart), hora_fin: normalize(rawEnd) }
+function normalizeTimeToHHMMSS(value) {
+  const v = String(value || '').trim()
+  if (!/^\d{2}:\d{2}$/.test(v)) return ''
+  return `${v}:00`
+}
+
+function toSecondsFromHHMM(value) {
+  const v = String(value || '').trim()
+  if (!/^\d{2}:\d{2}$/.test(v)) return -1
+  const [hh, mm] = v.split(':').map(Number)
+  return hh * 3600 + mm * 60
 }
 
 function normalizeResourceFromApi(item) {
@@ -32,10 +39,6 @@ function normalizeResourceFromApi(item) {
     stock: Number(item?.stock || 0),
     precio: Number(item?.precio || 0)
   }
-}
-
-function buildDefaultRanges() {
-  return ['08:00 - 12:00', '13:00 - 17:00', '18:00 - 22:00']
 }
 
 export default function GestorReservasLayout() {
@@ -61,8 +64,8 @@ export default function GestorReservasLayout() {
     espacio: '',
     idEspacio: '',
     fecha: toYmdLocal(),
-    horario: '',
-    horariosDisponibles: buildDefaultRanges(),
+    horaInicio: '',
+    horaFin: '',
     clientSaved: false
   })
 
@@ -122,7 +125,10 @@ export default function GestorReservasLayout() {
     }
     if (step === 2) return Boolean(form.idEspacio)
     if (step === 3) return Boolean(form.fecha)
-    if (step === 4) return Boolean(form.horario)
+    if (step === 4) {
+      if (!form.horaInicio || !form.horaFin) return false
+      return toSecondsFromHHMM(form.horaInicio) < toSecondsFromHHMM(form.horaFin)
+    }
     if (step === 5) return resourcesValidation.valid
     return true
   }
@@ -150,8 +156,8 @@ export default function GestorReservasLayout() {
       espacio: '',
       idEspacio: '',
       fecha: toYmdLocal(),
-      horario: '',
-      horariosDisponibles: buildDefaultRanges(),
+      horaInicio: '',
+      horaFin: '',
       clientSaved: false
     })
   }
@@ -328,9 +334,14 @@ export default function GestorReservasLayout() {
       return
     }
 
-    const { hora_inicio, hora_fin } = splitScheduleRange(form.horario)
+    const hora_inicio = normalizeTimeToHHMMSS(form.horaInicio)
+    const hora_fin = normalizeTimeToHHMMSS(form.horaFin)
     if (!hora_inicio || !hora_fin) {
-      setUiMessage({ type: 'error', text: 'Horario inválido. Usa un rango válido.' })
+      setUiMessage({ type: 'error', text: 'Debes seleccionar hora de inicio y hora de finalización válidas.' })
+      return
+    }
+    if (toSecondsFromHHMM(form.horaInicio) >= toSecondsFromHHMM(form.horaFin)) {
+      setUiMessage({ type: 'error', text: 'La hora final debe ser mayor que la hora inicial.' })
       return
     }
 
@@ -505,16 +516,31 @@ export default function GestorReservasLayout() {
           {currentStep === 4 && (
             <div className="gestor-flowCard">
               <h3>Horario</h3>
-              <select
-                className="input-form"
-                value={form.horario}
-                onChange={(e) => setField('horario', e.target.value)}
-              >
-                <option value="">Selecciona un horario</option>
-                {(form.horariosDisponibles || []).map((h) => (
-                  <option key={h} value={h}>{h}</option>
-                ))}
-              </select>
+              <div className="sa-grid2">
+                <div>
+                  <label style={{ fontWeight: 700, display: 'block', marginBottom: 6 }}>Hora de inicio</label>
+                  <input
+                    className="input-form"
+                    type="time"
+                    value={form.horaInicio}
+                    onChange={(e) => setField('horaInicio', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, display: 'block', marginBottom: 6 }}>Hora de finalización</label>
+                  <input
+                    className="input-form"
+                    type="time"
+                    value={form.horaFin}
+                    onChange={(e) => setField('horaFin', e.target.value)}
+                  />
+                </div>
+              </div>
+              {form.horaInicio && form.horaFin && toSecondsFromHHMM(form.horaInicio) >= toSecondsFromHHMM(form.horaFin) && (
+                <div className="sa-alert sa-alert-danger" style={{ marginTop: 10 }}>
+                  La hora final debe ser mayor que la hora inicial.
+                </div>
+              )}
             </div>
           )}
 
@@ -538,29 +564,34 @@ export default function GestorReservasLayout() {
                     const active = Boolean(state.selected)
 
                     return (
-                      <div key={resource.id_recurso} className={`gestor-resourceBtn ${active ? 'active' : ''}`}>
-                        <button
-                          type="button"
-                          style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}
-                          onClick={() => toggleResource(resource)}
-                        >
-                          <span>{resource.nombre}</span>
-                          <small>
-                            Tipo: {resource.tipo} · Stock: {resource.stock} · ${resource.precio}
-                          </small>
-                        </button>
+                      <div key={`resource-${resource.id_recurso}`} className={`gestor-resourceBtn ${active ? 'active' : ''}`}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <strong>{resource.nombre}</strong>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={active}
+                              onChange={() => toggleResource(resource)}
+                            />
+                            Seleccionar
+                          </label>
+                        </div>
+                        <small style={{ display: 'block', marginTop: 6 }}>
+                          Tipo: {resource.tipo} · Stock: {resource.stock} · ${resource.precio}
+                        </small>
 
-                        {active && (
+                        <div style={{ marginTop: 10 }}>
+                          <label style={{ fontWeight: 700, display: 'block', marginBottom: 6 }}>Cantidad</label>
                           <input
                             type="number"
-                            min="0"
+                            min="1"
                             max={resource.stock}
                             className="input-form"
-                            style={{ marginTop: 8 }}
-                            value={state.cantidad}
+                            value={active ? state.cantidad : ''}
+                            disabled={!active}
                             onChange={(e) => updateResourceQuantity(resource.id_recurso, e.target.value)}
                           />
-                        )}
+                        </div>
                       </div>
                     )
                   })}
@@ -592,7 +623,7 @@ export default function GestorReservasLayout() {
                 <div><strong>Espacio:</strong> {form.espacio}</div>
                 <div><strong>ID espacio:</strong> {form.idEspacio}</div>
                 <div><strong>Fecha:</strong> {form.fecha}</div>
-                <div><strong>Horario:</strong> {form.horario}</div>
+                <div><strong>Horario:</strong> {form.horaInicio && form.horaFin ? `${form.horaInicio} - ${form.horaFin}` : '-'}</div>
                 <div>
                   <strong>Recursos:</strong>{' '}
                   {selectedResourcesList.length

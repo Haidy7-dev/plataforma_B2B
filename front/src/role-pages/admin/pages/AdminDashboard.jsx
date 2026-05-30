@@ -34,7 +34,7 @@ function toneClassByEventStatus(status) {
 }
 
 export default function AdminDashboard() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [stats, setStats] = useState({
@@ -63,7 +63,9 @@ export default function AdminDashboard() {
           recentReservations: Array.isArray(res?.data?.recentReservations) ? res.data.recentReservations : []
         })
       } catch (e) {
-        setError(String(e?.message || e))
+        const status = e?.response?.status
+        const message = e?.response?.data?.message || e?.message || 'Error cargando dashboard'
+        setError(status ? `${message} (HTTP ${status})` : String(message))
       } finally {
         setLoading(false)
       }

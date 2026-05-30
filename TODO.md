@@ -1,22 +1,33 @@
-# TODO - Corrección error "Error en la solicitud" y estabilización del flujo Gestor
+# TODO - Mejoras flujo Gestor (Horario libre, recursos independientes, UTF-8)
 
-- [x] 1. Diagnóstico de enrutamiento Front/Back
-  - [x] Revisar `back/src/server.js` y confirmar prefijos reales de API.
-  - [x] Revisar `back/src/routes/index.js` para validar base de rutas (`/gestor`, etc.).
-  - [x] Revisar `front/src/role-pages/gestor-reservas/GestorReservasLayout.jsx` para identificar construcción de URLs.
+- [ ] 1. Paso 4 (Horario libre)
+  - [ ] Editar `front/src/role-pages/gestor-reservas/GestorReservasLayout.jsx`
+  - [ ] Reemplazar select de horarios predefinidos por `horaInicio` y `horaFin` (`input type="time"`).
+  - [ ] Validar en frontend que ambos campos estén completos y que `horaFin > horaInicio`.
+  - [ ] Enviar `hora_inicio` y `hora_fin` en payload de creación de reserva.
+  - [ ] Mostrar horas en resumen de confirmación.
 
-- [x] 2. Corregir conectividad en desarrollo (Vite)
-  - [x] Editar `front/vite.config.js` para agregar proxy de `/api` hacia `http://localhost:4000`.
+- [ ] 2. Paso 5 (Recursos independientes por tarjeta)
+  - [ ] Refactorizar render de recursos en `GestorReservasLayout.jsx` para evitar dependencias cruzadas entre columnas.
+  - [ ] Mantener estado por recurso (`selected`, `cantidad`) completamente independiente por `id_recurso`.
+  - [ ] Asegurar keys estables (nunca index).
+  - [ ] Eliminar patrones de interacción problemáticos (`all: unset` en botón contenedor).
+  - [ ] Mantener selección/cantidad al cambiar de paso o hacer scroll.
+  - [ ] Mejorar UI de cards: nombre, tipo, stock, precio, cantidad y estado visual activo.
 
-- [x] 3. Mejorar manejo de errores HTTP/red en Gestor
-  - [x] Editar `request()` en `front/src/role-pages/gestor-reservas/GestorReservasLayout.jsx`.
-  - [x] Manejar explícitamente errores de red (backend caído / CORS / proxy ausente).
-  - [x] Propagar mensaje del backend cuando exista (`message` / `error`) y no solo mensaje genérico.
+- [ ] 3. Backend reservas (validación y disponibilidad)
+  - [ ] Editar `back/src/routes/reservations.js`.
+  - [ ] Mantener/fortalecer validación de `hora_inicio`/`hora_fin`.
+  - [ ] Agregar endpoint opcional de disponibilidad para el paso 4 (antes de confirmar creación).
+  - [ ] Mejorar mensajes de error para cruces de horario y rango inválido.
 
-- [x] 4. Ajustar flujo de confirmación de reserva
-  - [x] Corregir acciones del paso final para que la creación ocurra en la etapa de confirmación y no quede bloqueada por el stepper.
-  - [x] Mantener UX consistente para "Nueva reserva".
+- [ ] 4. Corrección UTF-8 integral
+  - [ ] Revisar y ajustar `back/src/services/mysql.js` para conexión `utf8mb4`.
+  - [ ] Crear script SQL de normalización de charset/collation para tablas relevantes.
+  - [ ] Limpiar caracteres dañados visibles en frontend/backend.
+  - [ ] Garantizar respuesta JSON y lectura/escritura en UTF-8 consistente.
 
-- [ ] 5. Verificación final
-  - [ ] Validar que cargas de espacios/recursos funcionen sin "Error en la solicitud".
-  - [ ] Validar creación de cliente y creación de reserva en flujo completo.
+- [ ] 5. Validaciones finales y entrega
+  - [ ] Verificar consistencia de datos de hora en módulos relacionados.
+  - [ ] Verificar que recursos de ambas columnas se seleccionen simultáneamente sin interferencia.
+  - [ ] Preparar diagnóstico final con causa raíz, cambios aplicados y checklist de pruebas funcionales.

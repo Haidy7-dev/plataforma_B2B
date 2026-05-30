@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
+import { useAuth } from '../../../auth/AuthContext.jsx'
 
 const API_BASE = 'http://localhost:4000'
 
@@ -16,6 +17,7 @@ function formatMoney(value) {
 }
 
 export default function AdminReports() {
+  const { token } = useAuth() || {}
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [data, setData] = useState({
@@ -32,7 +34,10 @@ export default function AdminReports() {
       try {
         setLoading(true)
         setError('')
-        const res = await axios.get(`${API_BASE}/admin/reports/summary`)
+        const authHeader = token ? `Bearer ${token}` : ''
+        const res = await axios.get(`${API_BASE}/admin/reports/summary`, {
+          headers: { Authorization: authHeader }
+        })
         setData({
           incidencias: Number(res?.data?.incidencias || 0),
           cumplimiento: Number(res?.data?.cumplimiento || 0),
@@ -47,7 +52,18 @@ export default function AdminReports() {
           upcomingEvents: Array.isArray(res?.data?.upcomingEvents) ? res.data.upcomingEvents : []
         })
       } catch (e) {
-        setError(String(e?.message || e))
+        const status = e?.response?.status
+        const message = e?.response?.data?.message || e?.message || 'Error cargando reportes'
+        const detail = e?.response?.data?.error || e?.response?.data?.stack || null
+        setError(
+          status
+            ? detail
+              ? `${message} (HTTP ${status}): ${detail}`
+              : `${message} (HTTP ${status})`
+            : detail
+              ? `${message}: ${detail}`
+              : String(message)
+        )
       } finally {
         setLoading(false)
       }

@@ -27,7 +27,17 @@ export function AuthProvider({ children }) {
   })
   const [token, setToken] = useState(() => {
     try {
-      return localStorage.getItem('token') || ''
+      return (
+        localStorage.getItem('token') ||
+        localStorage.getItem('accessToken') ||
+        localStorage.getItem('authToken') ||
+        localStorage.getItem('jwt') ||
+        sessionStorage.getItem('token') ||
+        sessionStorage.getItem('accessToken') ||
+        sessionStorage.getItem('authToken') ||
+        sessionStorage.getItem('jwt') ||
+        ''
+      )
     } catch {
       return ''
     }
@@ -51,7 +61,12 @@ export function AuthProvider({ children }) {
 
         const safeToken = newToken || ''
 
-        if (safeToken) localStorage.setItem('token', safeToken)
+        if (safeToken) {
+          localStorage.setItem('token', safeToken)
+          localStorage.setItem('accessToken', safeToken)
+          localStorage.setItem('authToken', safeToken)
+          localStorage.setItem('jwt', safeToken)
+        }
         if (u) localStorage.setItem('auth_user', JSON.stringify(u))
         setToken(safeToken)
       },
@@ -65,6 +80,8 @@ export function AuthProvider({ children }) {
           'token',
           'auth_user',
           'accessToken',
+          'authToken',
+          'jwt',
           'userData',
           'authStorage'
         ]

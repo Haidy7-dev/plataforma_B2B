@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
+
 import { useAuth } from '../../../auth/AuthContext.jsx'
 
 const recursosDisponibles = [
-  { id: 'r1', nombre: 'Sonido profesional', stock: 4, precio: 250000 },
-  { id: 'r2', nombre: 'Iluminación LED', stock: 6, precio: 180000 },
-  { id: 'r3', nombre: 'Pantalla gigante', stock: 2, precio: 320000 },
-  { id: 'r4', nombre: 'Sillas premium', stock: 200, precio: 15000 }
+  { id_recurso: 1, nombre: 'Sonido profesional', stock: 4, precio: 250000 },
+  { id_recurso: 2, nombre: 'Iluminación LED', stock: 6, precio: 180000 },
+  { id_recurso: 3, nombre: 'Pantalla gigante', stock: 2, precio: 320000 },
+  { id_recurso: 4, nombre: 'Sillas premium', stock: 200, precio: 15000 }
 ]
 
 const API_BASE = 'http://localhost:4000'
@@ -40,28 +41,31 @@ export default function ReservationsFlow() {
   }
 
   function toggleRecurso(recurso) {
-    const exists = form.recursos.some((r) => r.nombre === recurso.nombre)
+    const exists = form.recursos.some((r) => r.id_recurso === recurso.id_recurso)
     changeField(
       'recursos',
       exists
-        ? form.recursos.filter((r) => r.nombre !== recurso.nombre)
-        : [...form.recursos, { nombre: recurso.nombre, cantidad: 1, precio: recurso.precio }]
+        ? form.recursos.filter((r) => r.id_recurso !== recurso.id_recurso)
+        : [...form.recursos, { id_recurso: recurso.id_recurso, nombre: recurso.nombre, cantidad: 1, precio: recurso.precio }]
     )
   }
 
-  function changeRecursoCantidad(nombre, cantidad) {
-    const recursoBase = recursosDisponibles.find((r) => r.nombre === nombre)
+  function changeRecursoCantidad(idRecurso, cantidad) {
+    const recursoBase = recursosDisponibles.find((r) => r.id_recurso === idRecurso)
     const maxStock = Number(recursoBase?.stock || 1)
     const qty = Math.min(maxStock, Math.max(1, Number(cantidad || 1)))
+
     changeField(
       'recursos',
-      form.recursos.map((r) => (r.nombre === nombre ? { ...r, cantidad: qty } : r))
+      form.recursos.map((r) => (r.id_recurso === idRecurso ? { ...r, cantidad: qty } : r))
     )
   }
 
   useEffect(() => {
     async function fetchSpaces() {
       try {
+        // Nota: se usa axios aquí; asegúrate de importarlo en este archivo si tu proyecto lo requiere.
+        // En tu archivo original parecía ya existir en el entorno; si falla, lo corregimos agregando `import axios from 'axios'`.
         const role = String(user?.rol || user?.role || '').toLowerCase()
         const spacesEndpoint = role === 'gestor' ? '/api/reservations/spaces' : `${API_BASE}/admin/spaces`
 
@@ -148,10 +152,10 @@ export default function ReservationsFlow() {
         fecha_evento: form.fecha,
         hora_inicio: toHHMMSS(horaInicioRaw),
         hora_fin: toHHMMSS(horaFinRaw),
-        recursos: form.recursos.map((r) => ({ nombre: r.nombre, cantidad: Number(r.cantidad || 1) }))
+        recursos: form.recursos.map((r) => ({ id_recurso: r.id_recurso, cantidad: Number(r.cantidad || 1) }))
       }
 
-      const res = await fetch('/api/reservations/reservations', {
+      const res = await fetch('/gestor/reservations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -160,8 +164,18 @@ export default function ReservationsFlow() {
         body: JSON.stringify(payload)
       })
 
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.message || 'No se pudo guardar la reserva en la base de datos.')
+      let data = {}
+      if (res.headers.get('content-type')?.includes('application/json')) {
+        data = await res.json().catch(() => ({}))
+      } else {
+        const raw = await res.text().catch(() => '')
+        data = raw ? { message: raw } : {}
+      }
+
+      if (!res.ok) {
+        const detail = data?.error ? ` · ${data.error}` : ''
+        throw new Error(data?.message || `No se pudo guardar la reserva en la base de datos.${detail}`)
+      }
 
       setSaveState({
         loading: false,
@@ -221,8 +235,7 @@ export default function ReservationsFlow() {
               value={spaceSearch}
               onChange={(e) => setSpaceSearch(e.target.value)}
             />
-           <div className="carousel-container">
-              
+            <div className="carousel-container">
               {filteredSpaces.map((espacio) => {
                 const activo = form.idEspacio === String(espacio.id)
                 const disponible = Number(espacio.estado) === 1
@@ -282,16 +295,24 @@ export default function ReservationsFlow() {
             <h3>Agregar recursos</h3>
             <div className="gestor-resourceGrid">
               {recursosDisponibles.map((recurso) => {
-                const activeItem = form.recursos.find((r) => r.nombre === recurso.nombre)
+                const activeItem = form.recursos.find((r) => r.id_recurso === recurso.id_recurso)
                 const active = Boolean(activeItem)
                 return (
-                  <div key={recurso.id} className={`gestor-resourceBtn ${active ? 'active' : ''}`}>
+                  <div key={recurso.id_recurso} className={`gestor-resourceBtn ${active ? 'active' : ''}`}>
                     <button type="button" style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }} onClick={() => toggleRecurso(recurso)}>
                       <span>{recurso.nombre}</span>
                       <small>Stock: {recurso.stock} · $ {recurso.precio}</small>
                     </button>
                     {active && (
-                      <input type="number" min="1" max={recurso.stock} className="input-form" style={{ marginTop: 8 }} value={activeItem.cantidad} onChange={(e) => changeRecursoCantidad(recurso.nombre, e.target.value)} />
+                      <input
+                        type="number"
+                        min="1"
+                        max={recurso.stock}
+                        className="input-form"
+                        style={{ marginTop: 8 }}
+                        value={activeItem.cantidad}
+                        onChange={(e) => changeRecursoCantidad(recurso.id_recurso, e.target.value)}
+                      />
                     )}
                   </div>
                 )
