@@ -30,14 +30,17 @@ export default function AdminReports() {
   })
 
   useEffect(() => {
+    if (!token) return
+
     async function load() {
       try {
         setLoading(true)
         setError('')
-        const authHeader = token ? `Bearer ${token}` : ''
+
         const res = await axios.get(`${API_BASE}/admin/reports/summary`, {
-          headers: { Authorization: authHeader }
+          headers: { Authorization: `Bearer ${token}` }
         })
+
         setData({
           incidencias: Number(res?.data?.incidencias || 0),
           cumplimiento: Number(res?.data?.cumplimiento || 0),
@@ -68,8 +71,9 @@ export default function AdminReports() {
         setLoading(false)
       }
     }
+
     load()
-  }, [])
+  }, [token])
 
   const financialTotal = useMemo(
     () =>
@@ -79,6 +83,48 @@ export default function AdminReports() {
       Number(data.financieros.DEUDA || 0),
     [data.financieros]
   )
+
+  const [updatingEstados, setUpdatingEstados] = useState({})
+
+  const updateEstadoFinanciero = async (id_reserva, estado_financiero) => {
+    if (!id_reserva) return
+    const key = String(id_reserva)
+
+    setUpdatingEstados((prev) => ({ ...prev, [key]: true }))
+    try {
+      const res = await axios.put(
+        `${API_BASE}/admin/reports/reservations/${id_reserva}/financiero`,
+        { estado_financiero },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (!res?.data?.ok) throw new Error(res?.data?.message || 'No se pudo actualizar')
+
+      // recargar para reflejar cambios
+      const refreshed = await axios.get(`${API_BASE}/admin/reports/summary`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setData({
+        incidencias: Number(refreshed?.data?.incidencias || 0),
+        cumplimiento: Number(refreshed?.data?.cumplimiento || 0),
+        totalReservas: Number(refreshed?.data?.totalReservas || 0),
+        financieros: {
+          PENDIENTE: Number(refreshed?.data?.financieros?.PENDIENTE || 0),
+          PARCIAL: Number(refreshed?.data?.financieros?.PARCIAL || 0),
+          PAGADO: Number(refreshed?.data?.financieros?.PAGADO || 0),
+          DEUDA: Number(refreshed?.data?.financieros?.DEUDA || 0)
+        },
+        unpaidReservations: Array.isArray(refreshed?.data?.unpaidReservations) ? refreshed.data.unpaidReservations : [],
+        upcomingEvents: Array.isArray(refreshed?.data?.upcomingEvents) ? refreshed.data.upcomingEvents : []
+      })
+      setError('')
+    } catch (e) {
+      const status = e?.response?.status
+      const message = e?.response?.data?.message || e?.message || 'Error actualizando estado financiero'
+      setError(status ? `${message} (HTTP ${status})` : String(message))
+    } finally {
+      setUpdatingEstados((prev) => ({ ...prev, [key]: false }))
+    }
+  }
 
   return (
     <div className="sa-content">
@@ -147,17 +193,47 @@ export default function AdminReports() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(data.unpaidReservations || []).length ? data.unpaidReservations.map((row) => (
-                      <tr key={`unpaid-${row.id_reserva}`}>
-                        <td>{row.id_reserva}</td>
-                        <td>{row.cliente || '-'}</td>
-                        <td>{row.espacio || '-'}</td>
-                        <td>{formatDate(row.fecha_evento)}</td>
-                        <td>{row.estado_evento || '-'}</td>
-                        <td>{row.estado_financiero || '-'}</td>
-                        <td>{formatMoney(row.total)}</td>
-                      </tr>
-                    )) : (
+                    {(data.unpaidReservations || []).length ? data.unpaidReservations.map((row) => {
+                      const id = row.id_reserva
+                      const isUpdating = Boolean(updatingEstados[String(id)])
+                      const current = String(row.estado_financiero || '').toUpperCase()
+                      return (
+                        <tr key={`unpaid-${row.id_reserva}`}>
+                          <td>{row.id_reserva}</td>
+                          <td>{row.cliente || '-'}</td>
+                          <td>{row.espacio || '-'}</td>
+                          <td>{formatDate(row.fecha_evento)}</td>
+                          <td>{row.estado_evento || '-'}</td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 900 }}>{current || '-'}</span>
+                              <button
+                                style={{ padding: '6px 10px', cursor: isUpdating ? 'not-allowed' : 'pointer' }}
+                                disabled={isUpdating || current === 'PENDIENTE'}
+                                onClick={() => updateEstadoFinanciero(id, 'PENDIENTE')}
+                              >
+                                PENDIENTE
+                              </button>
+                              <button
+                                style={{ padding: '6px 10px', cursor: isUpdating ? 'not-allowed' : 'pointer' }}
+                                disabled={isUpdating || current === 'PARCIAL'}
+                                onClick={() => updateEstadoFinanciero(id, 'PARCIAL')}
+                              >
+                                PARCIAL
+                              </button>
+                              <button
+                                style={{ padding: '6px 10px', cursor: isUpdating ? 'not-allowed' : 'pointer' }}
+                                disabled={isUpdating || current === 'PAGADO'}
+                                onClick={() => updateEstadoFinanciero(id, 'PAGADO')}
+                              >
+                                PAGADO
+                              </button>
+                            </div>
+                          </td>
+                          <td>{formatMoney(row.total)}</td>
+                        </tr>
+                      )
+                    }) : (
                       <tr>
                         <td colSpan={7}><div className="sa-mutedBox">Sin reservas sin pagar.</div></td>
                       </tr>

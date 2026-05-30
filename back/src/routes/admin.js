@@ -21,6 +21,7 @@ import { getPool } from '../services/mysql.js'
 
 const ESTADOS_EVENTO_VALIDOS = new Set(['COTIZACION', 'CONFIRMADO', 'FINALIZADO', 'CANCELADO'])
 const ESTADOS_FINANCIEROS_VALIDOS = new Set(['PENDIENTE', 'PARCIAL', 'PAGADO', 'DEUDA'])
+const ESTADOS_FINANCIEROS_ADMIN_VALIDOS = new Set(['PENDIENTE', 'PARCIAL', 'PAGADO'])
 
 function toBool(v, fallback = null) {
   if (v === undefined || v === null || v === '') return fallback
@@ -404,6 +405,60 @@ adminRouter.get('/dashboard/stats', async (req, res) => {
     })
   } catch (e) {
     return res.status(500).json({ message: 'Error cargando dashboard', error: String(e?.message || e) })
+  }
+})
+
+adminRouter.put('/reports/reservations/:id_reserva/financiero', async (req, res) => {
+  const id_empresa = req.user?.id_empresa
+  const id_reserva = Number(req.params.id_reserva)
+  const estado_financiero = String(req.body?.estado_financiero || '').toUpperCase()
+
+  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
+  if (!id_reserva) return res.status(400).json({ message: 'id_reserva inválido' })
+  if (!ESTADOS_FINANCIEROS_ADMIN_VALIDOS.has(estado_financiero)) {
+    return res.status(400).json({ message: 'estado_financiero inválido. Usa PENDIENTE, PARCIAL o PAGADO' })
+  }
+
+  const pool = getPool()
+  const conn = await pool.getConnection()
+
+  try {
+    await conn.beginTransaction()
+
+    // Asegurar que la reserva pertenece a la empresa del JWT
+    const [rows] = await conn.query(
+      `
+      SELECT r.id_reserva
+      FROM reserva r
+      INNER JOIN espacio e ON e.id_espacio = r.id_espacio
+      WHERE r.id_reserva = ?
+        AND e.id_empresa = ?
+      LIMIT 1
+      `,
+      [id_reserva, Number(id_empresa)]
+    )
+
+    if (!rows?.length) {
+      await conn.rollback()
+      return res.status(404).json({ message: 'Reserva no encontrada para tu empresa' })
+    }
+
+    await conn.query(
+      `
+      UPDATE reserva
+      SET estado_financiero = ?
+      WHERE id_reserva = ?
+      `,
+      [estado_financiero, id_reserva]
+    )
+
+    await conn.commit()
+    return res.json({ ok: true, id_reserva, estado_financiero })
+  } catch (e) {
+    await conn.rollback()
+    return res.status(500).json({ message: 'Error actualizando estado financiero', error: String(e?.message || e) })
+  } finally {
+    conn.release()
   }
 })
 

@@ -48,6 +48,8 @@ export default function AdminDashboard() {
   })
 
   useEffect(() => {
+    if (!token) return
+
     async function load() {
       try {
         setLoading(true)
@@ -72,7 +74,7 @@ export default function AdminDashboard() {
     }
 
     load()
-  }, [])
+  }, [token])
 
   const upcomingTop5 = useMemo(() => (stats.upcomingEvents || []).slice(0, 5), [stats.upcomingEvents])
 
