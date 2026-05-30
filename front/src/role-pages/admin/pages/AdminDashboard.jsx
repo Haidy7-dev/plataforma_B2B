@@ -54,7 +54,9 @@ export default function AdminDashboard() {
       try {
         setLoading(true)
         setError('')
-        const res = await axios.get(`${API_BASE}/admin/dashboard/stats`)
+        const res = await axios.get(`${API_BASE}/admin/dashboard/stats`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
         setStats({
           activeUsers: Number(res?.data?.activeUsers || 0),
           confirmedEvents: Number(res?.data?.confirmedEvents || 0),

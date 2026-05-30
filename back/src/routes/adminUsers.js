@@ -190,6 +190,14 @@ adminUsersRouter.patch('/users/:id/status', async (req, res) => {
   }
 })
 
+function passwordOkForAdminChange(password) {
+  if (typeof password !== 'string') return false
+  const p = password.trim()
+  // Requisito del usuario: máximo 6 caracteres (ej: "123456")
+  // Nota: no hay validación de mínimo aquí para no bloquear contraseñas cortas si el admin lo requiere.
+  return p.length > 0 && p.length <= 6
+}
+
 // POST /admin/users/:id/reset-password
 adminUsersRouter.post('/users/:id/reset-password', async (req, res) => {
   const pool = getPool()
@@ -217,6 +225,40 @@ adminUsersRouter.post('/users/:id/reset-password', async (req, res) => {
     return res.json({ passwordTemporal: temp })
   } catch (e) {
     return res.status(500).json({ message: 'Error reseteando contraseña', error: String(e?.message || e) })
+  }
+})
+
+// POST /admin/users/:id/change-password
+adminUsersRouter.post('/users/:id/change-password', async (req, res) => {
+  const pool = getPool()
+  const id_empresa = req.user?.id_empresa
+  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
+
+  const userId = Number(req.params.id)
+  if (!userId) return res.status(400).json({ message: 'id inválido' })
+
+  const payload = req.body || {}
+  const { password } = payload
+
+  if (!password) return res.status(400).json({ message: 'password es requerido' })
+  if (!passwordOkForAdminChange(password)) return res.status(400).json({ message: 'password debe tener máximo 6 caracteres' })
+
+  try {
+    const [existing] = await pool.query(
+      'SELECT id_usuario AS id FROM usuario WHERE id_usuario = ? AND id_empresa = ?',
+      [userId, Number(id_empresa)]
+    )
+    if (!existing?.length) return res.status(404).json({ message: 'Usuario no encontrado en tu empresa' })
+
+    const hashed = await bcrypt.hash(String(password), 10)
+    await pool.query(
+      'UPDATE usuario SET password = ? WHERE id_usuario = ? AND id_empresa = ?',
+      [hashed, userId, Number(id_empresa)]
+    )
+
+    return res.json({ ok: true })
+  } catch (e) {
+    return res.status(500).json({ message: 'Error cambiando contraseña', error: String(e?.message || e) })
   }
 })
 

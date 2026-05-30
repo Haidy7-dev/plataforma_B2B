@@ -61,6 +61,7 @@ export default function AdminUsers() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(null)
 
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
@@ -72,6 +73,9 @@ export default function AdminUsers() {
     nombre: '',
     correo: '',
     passwordTemporal: '',
+    // edición de contraseña (ADMIN)
+    nuevaPassword: '',
+    confirmarPassword: '',
     rol: 'LOGISTICA',
     estado: true
   })
@@ -84,13 +88,17 @@ export default function AdminUsers() {
   async function fetchUsers() {
     setLoading(true)
     setError(null)
+    setSuccess(null)
     try {
       const params = {
         search: search || undefined,
         role: roleFilter || undefined
       }
 
-      const res = await axios.get(`${API_BASE}/admin/users`, { params })
+      const res = await axios.get(`${API_BASE}/admin/users`, {
+        params,
+        headers: user?.token ? { Authorization: `Bearer ${user.token}` } : undefined
+      })
       setRows(res.data?.users || [])
     } catch (e) {
       setError(String(e?.response?.data?.message || e?.message || e))
@@ -119,6 +127,8 @@ export default function AdminUsers() {
       nombre: '',
       correo: '',
       passwordTemporal: '',
+      nuevaPassword: '',
+      confirmarPassword: '',
       rol: 'LOGISTICA',
       estado: true
     })
@@ -131,6 +141,8 @@ export default function AdminUsers() {
       nombre: row.nombre || '',
       correo: row.correo || '',
       passwordTemporal: '',
+      nuevaPassword: '',
+      confirmarPassword: '',
       rol: normalizeRoleForSelect(row.rol),
       estado: Boolean(row.estado)
     })
@@ -144,14 +156,16 @@ export default function AdminUsers() {
       if (!canEdit) throw new Error('ADMIN no autenticado o sin id_empresa')
 
       if (editing) {
-        // PUT /admin/users/:id
+        // PUT /admin/users/:id (sin tocar contraseña desde aquí)
         const payload = {
           nombre: form.nombre,
           correo: form.correo,
           rol: normalizeRoleForApi(form.rol),
           estado: form.estado
         }
-        await axios.put(`${API_BASE}/admin/users/${editing.id}`, payload)
+        await axios.put(`${API_BASE}/admin/users/${editing.id}`, payload, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
       } else {
         // POST /admin/users
         const payload = {
@@ -161,7 +175,9 @@ export default function AdminUsers() {
           rol: normalizeRoleForApi(form.rol),
           estado: form.estado
         }
-        await axios.post(`${API_BASE}/admin/users`, payload)
+        await axios.post(`${API_BASE}/admin/users`, payload, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
       }
 
       setModalOpen(false)
@@ -173,11 +189,79 @@ export default function AdminUsers() {
     }
   }
 
+  function passwordOkForAdminChange(password) {
+    if (typeof password !== 'string') return false
+    const p = password.trim()
+    // Requisito del usuario: máximo 6 caracteres (ej: "123456")
+    return p.length > 0 && p.length <= 6
+  }
+
+  async function changePassword() {
+    if (!editing) return
+    setLoading(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      if (!canEdit) throw new Error('ADMIN no autenticado o sin id_empresa')
+
+      if (!passwordOkForAdminChange(form.nuevaPassword)) {
+        throw new Error('La nueva contraseña debe tener máximo 6 caracteres')
+      }
+      if (form.nuevaPassword !== form.confirmarPassword) {
+        throw new Error('La confirmación de contraseña no coincide')
+      }
+
+      const payload = { password: form.nuevaPassword }
+      await axios.post(`${API_BASE}/admin/users/${editing.id}/change-password`, payload, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+
+      setSuccess('Contraseña actualizada correctamente.')
+      // Limpiamos para evitar reuso/mostrar valores
+      setForm((f) => ({ ...f, nuevaPassword: '', confirmarPassword: '' }))
+      await fetchUsers()
+    } catch (e) {
+      setError(String(e?.response?.data?.message || e?.message || e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function generateTemporaryPassword() {
+    if (!editing) return
+    setLoading(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      if (!canEdit) throw new Error('ADMIN no autenticado o sin id_empresa')
+
+      const res = await axios.post(
+        `${API_BASE}/admin/users/${editing.id}/reset-password`,
+        {},
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      )
+      const temp = res.data?.passwordTemporal
+
+      if (!temp) throw new Error('No se recibió password temporal desde el servidor')
+
+      setSuccess('Contraseña temporal generada. Copia el valor mostrado en el modal.')
+      // Mostramos temporal en el campo “nuevaPassword” para que el ADMIN la copie.
+      // No se obtiene desde BD como texto plano (solo se genera y retorna).
+      setForm((f) => ({ ...f, nuevaPassword: temp, confirmarPassword: '' }))
+    } catch (e) {
+      setError(String(e?.response?.data?.message || e?.message || e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function toggleStatus(row, nextEstado) {
     setLoading(true)
     setError(null)
     try {
-      await axios.patch(`${API_BASE}/admin/users/${row.id}/status`, { estado: nextEstado })
+      await axios.patch(`${API_BASE}/admin/users/${row.id}/status`, { estado: nextEstado }, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
       await fetchUsers()
     } catch (e) {
       setError(String(e?.response?.data?.message || e?.message || e))
@@ -228,6 +312,10 @@ export default function AdminUsers() {
 
             {error ? (
               <div style={{ marginTop: 12, color: 'var(--danger)', fontWeight: 950 }}>{error}</div>
+            ) : null}
+
+            {success ? (
+              <div style={{ marginTop: 12, color: 'var(--success)', fontWeight: 950 }}>{success}</div>
             ) : null}
 
             <div className="sa-tableWrap" style={{ marginTop: 14 }}>
@@ -363,7 +451,58 @@ export default function AdminUsers() {
                 </div>
               ) : (
                 <div style={{ gridColumn: '1 / -1' }} className="sa-mutedBox">
-                  En edición no se modifica la contraseña desde esta vista.
+                  <div style={{ display: 'grid', gap: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 950, fontSize: 12, color: 'var(--muted)' }}>Contraseña</div>
+                      <input
+                        className="sa-select"
+                        value={form.nuevaPassword}
+                        onChange={(e) => setForm((f) => ({ ...f, nuevaPassword: e.target.value }))}
+                        placeholder="Nueva contraseña (máx. 6 caracteres)"
+                        disabled={loading}
+                        type="password"
+                      />
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 950, fontSize: 12, color: 'var(--muted)' }}>
+                        Confirmar contraseña
+                      </div>
+                      <input
+                        className="sa-select"
+                        value={form.confirmarPassword}
+                        onChange={(e) => setForm((f) => ({ ...f, confirmarPassword: e.target.value }))}
+                        placeholder="Repite la contraseña"
+                        disabled={loading}
+                        type="password"
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <button
+                        className="sa-btn sa-btnPrimary"
+                        onClick={changePassword}
+                        disabled={loading}
+                        type="button"
+                      >
+                        {loading ? 'Actualizando...' : 'Cambiar contraseña'}
+                      </button>
+
+                      <button
+                        className="sa-btn sa-btnGhost"
+                        onClick={generateTemporaryPassword}
+                        disabled={loading}
+                        type="button"
+                      >
+                        Generar contraseña temporal
+                      </button>
+                    </div>
+
+                    <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.35 }}>
+                      La contraseña actual no se muestra (por seguridad). Puedes cambiarla o generar una temporal.
+                      Si generas una temporal, se mostrará solo en el campo de este modal para copiarla.
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
