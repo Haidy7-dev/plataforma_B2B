@@ -56,7 +56,7 @@ function normalizeRoleForApi(r) {
 }
 
 export default function AdminUsers() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
 
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
@@ -164,7 +164,9 @@ export default function AdminUsers() {
           estado: form.estado
         }
         await axios.put(`${API_BASE}/admin/users/${editing.id}`, payload, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
+          headers: user?.token
+  ? { Authorization: `Bearer ${user.token}` }
+  : {}
         })
       } else {
         // POST /admin/users
@@ -176,7 +178,9 @@ export default function AdminUsers() {
           estado: form.estado
         }
         await axios.post(`${API_BASE}/admin/users`, payload, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
+          headers: user?.token
+  ? { Authorization: `Bearer ${user.token}` }
+  : {}
         })
       }
 
@@ -213,7 +217,9 @@ export default function AdminUsers() {
 
       const payload = { password: form.nuevaPassword }
       await axios.post(`${API_BASE}/admin/users/${editing.id}/change-password`, payload, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
+        headers: user?.token
+  ? { Authorization: `Bearer ${user.token}` }
+  : {}
       })
 
       setSuccess('Contraseña actualizada correctamente.')
@@ -238,7 +244,7 @@ export default function AdminUsers() {
       const res = await axios.post(
         `${API_BASE}/admin/users/${editing.id}/reset-password`,
         {},
-        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+        { headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {} }
       )
       const temp = res.data?.passwordTemporal
 
@@ -260,7 +266,9 @@ export default function AdminUsers() {
     setError(null)
     try {
       await axios.patch(`${API_BASE}/admin/users/${row.id}/status`, { estado: nextEstado }, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
+        headers: user?.token
+  ? { Authorization: `Bearer ${user.token}` }
+  : {}
       })
       await fetchUsers()
     } catch (e) {
@@ -488,19 +496,11 @@ export default function AdminUsers() {
                         {loading ? 'Actualizando...' : 'Cambiar contraseña'}
                       </button>
 
-                      <button
-                        className="sa-btn sa-btnGhost"
-                        onClick={generateTemporaryPassword}
-                        disabled={loading}
-                        type="button"
-                      >
-                        Generar contraseña temporal
-                      </button>
+                  
                     </div>
 
                     <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.35 }}>
-                      La contraseña actual no se muestra (por seguridad). Puedes cambiarla o generar una temporal.
-                      Si generas una temporal, se mostrará solo en el campo de este modal para copiarla.
+                      La contraseña actual no se muestra (por seguridad).
                     </div>
                   </div>
                 </div>

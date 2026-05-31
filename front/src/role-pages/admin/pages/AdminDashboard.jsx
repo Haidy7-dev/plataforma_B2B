@@ -100,18 +100,12 @@ export default function AdminDashboard() {
                 <div className="sa-kpiLabel">Usuarios activos</div>
                 <div className="sa-kpiValue">{loading ? '...' : stats.activeUsers}</div>
               </div>
-              <div className="sa-kpi">
-                <div className="sa-kpiLabel">Eventos confirmados</div>
-                <div className="sa-kpiValue">{loading ? '...' : stats.confirmedEvents}</div>
-              </div>
+            
               <div className="sa-kpi">
                 <div className="sa-kpiLabel">Pagos pendientes</div>
                 <div className="sa-kpiValue">{loading ? '...' : stats.pendingPayments}</div>
               </div>
-              <div className="sa-kpi">
-                <div className="sa-kpiLabel">Eventos finalizados</div>
-                <div className="sa-kpiValue">{loading ? '...' : stats.finalizedEvents}</div>
-              </div>
+             
             </div>
 
             <div style={{ marginTop: 16 }}>
