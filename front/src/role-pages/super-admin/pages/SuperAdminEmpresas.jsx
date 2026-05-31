@@ -106,7 +106,7 @@ export default function SuperAdminEmpresas() {
 
       // Validación UI extra (backend también valida)
       const telefonoStr = String(companyForm.telefono || '')
-      if (!/^\\d{10}$/.test(telefonoStr)) {
+      if (!/^\d{10}$/.test(telefonoStr)) {
         showMessage('err', 'Teléfono inválido: debe tener exactamente 10 dígitos numéricos.')
         return
       }
@@ -150,7 +150,7 @@ export default function SuperAdminEmpresas() {
 
     try {
       const passStr = String(adminForm.password || '')
-      if (!/^\\d{6}$/.test(passStr)) {
+      if (!/^\d{6}$/.test(passStr)) {
         showMessage('err', 'Password inválida: debe tener exactamente 6 dígitos numéricos.')
         return
       }
@@ -243,14 +243,14 @@ export default function SuperAdminEmpresas() {
               <input
                 required
                 inputMode="numeric"
-                pattern="\\d{10}"
+                pattern="[0-9]{10}"
                 minLength={10}
                 maxLength={10}
                 value={companyForm.telefono}
                 onChange={(e) => {
                   const next = e.target.value
                   // permitir solo dígitos mientras se escribe
-                  const onlyDigits = next.replace(/\\D/g, '')
+                  const onlyDigits = next.replace(/\D/g, '')
                   setCompanyForm((v) => ({ ...v, telefono: onlyDigits.slice(0, 10) }))
                 }}
                 placeholder="10 dígitos"
@@ -329,12 +329,12 @@ export default function SuperAdminEmpresas() {
               required
               type="password"
               inputMode="numeric"
-              pattern="\\d{6}"
+              pattern="[0-9]{6}"
               minLength={6}
               maxLength={6}
               value={adminForm.password}
               onChange={(e) => {
-                const onlyDigits = e.target.value.replace(/\\D/g, '').slice(0, 6)
+                const onlyDigits = e.target.value.replace(/\D/g, '').slice(0, 6)
                 setAdminForm((v) => ({ ...v, password: onlyDigits }))
               }}
               style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid #cbd5e1' }}
@@ -363,52 +363,7 @@ export default function SuperAdminEmpresas() {
         </form>
       </Section>
 
-      <Section title="Empresas" subtitle="Puedes eliminar empresas desde aquí.">
-        {loadingList ? (
-          <div style={{ fontWeight: 700, opacity: 0.8 }}>Cargando empresas...</div>
-        ) : companies.length === 0 ? (
-          <div style={{ fontWeight: 700, opacity: 0.8 }}>No hay empresas disponibles.</div>
-        ) : (
-          <div style={{ display: 'grid', gap: 10 }}>
-            {companies.map((c) => (
-              <div
-                key={c.id_empresa}
-                style={{
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 12,
-                  padding: 12,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  background: 'white'
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 900 }}>{c.nombre}</div>
-                  <div style={{ opacity: 0.75, fontWeight: 700, marginTop: 4 }}>NIT: {c.nit || '-'}</div>
-                </div>
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => deleteCompany(String(c.id_empresa))}
-                  style={{
-                    background: '#dc2626',
-                    color: 'white',
-                    border: '1px solid #dc2626',
-                    borderRadius: 8,
-                    padding: '8px 12px',
-                    fontWeight: 900,
-                    cursor: loading ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  Eliminar
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
+     
 
       {message ? (
         <div
