@@ -438,7 +438,7 @@ export default function AdminUsers() {
               {!editing ? (
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={{ fontWeight: 950, fontSize: 12, color: 'var(--muted)' }}>
-                    Contraseña temporal (obligatoria al crear)
+                    Contraseña (obligatoria al crear)
                   </div>
                   <input
                     className="sa-select"

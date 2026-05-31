@@ -104,6 +104,13 @@ export default function SuperAdminEmpresas() {
         return
       }
 
+      // Validación UI extra (backend también valida)
+      const telefonoStr = String(companyForm.telefono || '')
+      if (!/^\\d{10}$/.test(telefonoStr)) {
+        showMessage('err', 'Teléfono inválido: debe tener exactamente 10 dígitos numéricos.')
+        return
+      }
+
       const token = localStorage.getItem('token')
       if (!token) throw new Error('No hay token. Vuelve a iniciar sesión.')
 
@@ -111,6 +118,7 @@ export default function SuperAdminEmpresas() {
         `${API_BASE}/super-admin/companies`,
         {
           ...companyForm,
+          telefono: telefonoStr,
           nit: normalizeNit(companyForm.nit) || null,
           estado: companyForm.estado ? 1 : 0
         },
@@ -141,6 +149,12 @@ export default function SuperAdminEmpresas() {
     setMessage(null)
 
     try {
+      const passStr = String(adminForm.password || '')
+      if (!/^\\d{6}$/.test(passStr)) {
+        showMessage('err', 'Password inválida: debe tener exactamente 6 dígitos numéricos.')
+        return
+      }
+
       const token = localStorage.getItem('token')
       if (!token) throw new Error('No hay token. Vuelve a iniciar sesión.')
 
@@ -149,7 +163,7 @@ export default function SuperAdminEmpresas() {
         {
           nombre: adminForm.nombre,
           correo: adminForm.correo,
-          password: adminForm.password,
+          password: passStr,
           estado: adminForm.estado ? 1 : 0
         },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -159,6 +173,46 @@ export default function SuperAdminEmpresas() {
       setAdminForm((v) => ({ ...v, nombre: '', correo: '', password: '', estado: true }))
     } catch (err) {
       const text = err?.response?.data?.message || err?.message || 'Error creando admin'
+      showMessage('err', text)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function deleteCompany(companyId) {
+    const token = localStorage.getItem('token')
+    if (!token) {
+      showMessage('err', 'No hay token. Vuelve a iniciar sesión.')
+      return
+    }
+
+    if (!companyId) return
+
+    const ok = window.confirm('¿Seguro que deseas eliminar esta empresa? Esta acción no se puede deshacer.')
+    if (!ok) return
+
+    setLoading(true)
+    setMessage(null)
+    try {
+      await client.delete(`${API_BASE}/super-admin/companies/${companyId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+
+      showMessage('ok', 'Empresa eliminada correctamente.')
+
+      const list = await fetchCompanies()
+      setCompanies(list)
+
+      // Si eliminaste la empresa seleccionada para crear admin, limpiar selección
+      setAdminForm((v) => {
+        const nextCompanyId = String(v.companyId || '') === String(companyId) ? '' : v.companyId
+        return { ...v, companyId: nextCompanyId }
+      })
+
+      // También limpia el formulario de admin
+      setAdminForm((v) => ({ ...v, nombre: '', correo: '', password: '', estado: true }))
+    } catch (err) {
+      const text = err?.response?.data?.message || err?.message || 'Error eliminando empresa'
       showMessage('err', text)
     } finally {
       setLoading(false)
@@ -187,8 +241,19 @@ export default function SuperAdminEmpresas() {
             </Field>
             <Field label="Teléfono">
               <input
+                required
+                inputMode="numeric"
+                pattern="\\d{10}"
+                minLength={10}
+                maxLength={10}
                 value={companyForm.telefono}
-                onChange={(e) => setCompanyForm((v) => ({ ...v, telefono: e.target.value }))}
+                onChange={(e) => {
+                  const next = e.target.value
+                  // permitir solo dígitos mientras se escribe
+                  const onlyDigits = next.replace(/\\D/g, '')
+                  setCompanyForm((v) => ({ ...v, telefono: onlyDigits.slice(0, 10) }))
+                }}
+                placeholder="10 dígitos"
                 style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid #cbd5e1' }}
               />
             </Field>
@@ -241,7 +306,7 @@ export default function SuperAdminEmpresas() {
             </select>
           </Field>
 
-          <Field label="Nombre (opcional)">
+          <Field label="Nombre">
             <input
               value={adminForm.nombre}
               onChange={(e) => setAdminForm((v) => ({ ...v, nombre: e.target.value }))}
@@ -263,9 +328,17 @@ export default function SuperAdminEmpresas() {
             <input
               required
               type="password"
+              inputMode="numeric"
+              pattern="\\d{6}"
+              minLength={6}
+              maxLength={6}
               value={adminForm.password}
-              onChange={(e) => setAdminForm((v) => ({ ...v, password: e.target.value }))}
+              onChange={(e) => {
+                const onlyDigits = e.target.value.replace(/\\D/g, '').slice(0, 6)
+                setAdminForm((v) => ({ ...v, password: onlyDigits }))
+              }}
               style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid #cbd5e1' }}
+              placeholder="6 dígitos"
             />
           </Field>
 
@@ -288,6 +361,53 @@ export default function SuperAdminEmpresas() {
             {loading ? 'Procesando...' : 'Crear admin'}
           </button>
         </form>
+      </Section>
+
+      <Section title="Empresas" subtitle="Puedes eliminar empresas desde aquí.">
+        {loadingList ? (
+          <div style={{ fontWeight: 700, opacity: 0.8 }}>Cargando empresas...</div>
+        ) : companies.length === 0 ? (
+          <div style={{ fontWeight: 700, opacity: 0.8 }}>No hay empresas disponibles.</div>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {companies.map((c) => (
+              <div
+                key={c.id_empresa}
+                style={{
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 12,
+                  padding: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  background: 'white'
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 900 }}>{c.nombre}</div>
+                  <div style={{ opacity: 0.75, fontWeight: 700, marginTop: 4 }}>NIT: {c.nit || '-'}</div>
+                </div>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => deleteCompany(String(c.id_empresa))}
+                  style={{
+                    background: '#dc2626',
+                    color: 'white',
+                    border: '1px solid #dc2626',
+                    borderRadius: 8,
+                    padding: '8px 12px',
+                    fontWeight: 900,
+                    cursor: loading ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Eliminar
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </Section>
 
       {message ? (

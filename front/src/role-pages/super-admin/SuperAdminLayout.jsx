@@ -110,9 +110,9 @@ function Dashboard() {
   return (
     <div className="sa-stack">
       <section className="sa-grid4">
-        <Card tone="primary" title="Usuarios activos" value={String(stats.usuariosActivos)} hint="Cantidad real en BD" icon="👥" onClick={() => navigate('/super-admin/usuarios')} />
+        <Card tone="primary" title="Usuarios activos" value={String(stats.usuariosActivos)} hint="Cantidad real en BD" icon="👥" onClick={() => navigate('/super-admin')} />
         <Card tone="indigo" title="Empresas registradas" value={String(stats.empresasRegistradas)} hint="Cantidad real en BD" icon="🏢" onClick={() => navigate('/super-admin/empresas')} />
-        <Card tone="critical" title="Alertas del sistema" value={String(stats.alertasSistema)} hint="Conteo real desde incidentes" icon="⛔" onClick={() => navigate('/super-admin/reportes')} />
+        <Card tone="critical" title="Alertas del sistema" value={String(stats.alertasSistema)} hint="Conteo real desde incidentes" icon="⛔" onClick={() => navigate('/super-admin')} />
       </section>
 
       <section className="sa-grid2 sa-grid2-full">
@@ -139,19 +139,16 @@ function Dashboard() {
 export default function SuperAdminLayout() {
   return (
     <SuperAdminPremiumLayout
-      title="Inicio"
+      title="Usuarios/Empresa"
       roleLabel="Super Admin"
       links={[
-        { to: '/super-admin', label: 'Inicio', icon: 'bolt' },
-        { to: '/super-admin/usuarios', label: 'Usuarios/Empresa', icon: 'users' },
+        { to: '/super-admin', label: 'Usuarios/Empresa', icon: 'users' },
         { to: '/super-admin/empresas', label: 'Crear', icon: 'store' }
       ]}
     >
       <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/usuarios" element={<EmpresasUsuarios />} />
+        <Route path="/" element={<EmpresasUsuarios />} />
         <Route path="/empresas" element={<SuperAdminEmpresas />} />
-        <Route path="/reportes" element={<EmpresasUsuarios />} />
       </Routes>
     </SuperAdminPremiumLayout>
   )

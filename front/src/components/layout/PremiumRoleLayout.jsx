@@ -13,19 +13,6 @@ function Icon({ name }) {
   }
 
   switch (name) {
-    case 'bell':
-      return (
-        <svg
-          {...common}
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.73 21a2 2 0 01-3.46 0" />
-        </svg>
-      )
     case 'shield':
       return (
         <svg
@@ -142,31 +129,6 @@ export default function PremiumRoleLayout({
   children
 }) {
   const { user } = useAuth()
-  const [notifsOpen, setNotifsOpen] = useState(false)
-
-  const notifications = useMemo(
-    () => [
-      {
-        id: 1,
-        kind: 'critical',
-        title: 'Acceso bloqueado por riesgo',
-        meta: 'Últimos 5 min'
-      },
-      {
-        id: 2,
-        kind: 'info',
-        title: 'Sincronización de inventario finalizada',
-        meta: 'Hace 23 min'
-      },
-      {
-        id: 3,
-        kind: 'positive',
-        title: 'Operación completada sin incidencias',
-        meta: 'Hace 1 h'
-      }
-    ],
-    []
-  )
 
   const welcomeRole = toRoleLabel(user?.role || roleLabel)
 
@@ -174,7 +136,7 @@ export default function PremiumRoleLayout({
 
   return (
     <div className="sa-shell">
-      <aside className="sa-sidebar">
+      <aside className="sa-sidebar" style={{ position: 'relative', zIndex: 10, pointerEvents: 'auto' }}>
         <div className="sa-brand">
           <div className="sa-logo">7T</div>
           <div>
@@ -188,6 +150,7 @@ export default function PremiumRoleLayout({
             <NavLink
               key={l.to}
               to={l.to}
+              style={{ pointerEvents: 'auto' }}
               className={({ isActive }) =>
                 isActive ? 'sa-link sa-linkActive' : 'sa-link'
               }
@@ -209,38 +172,6 @@ export default function PremiumRoleLayout({
         <header className="sa-topbar">
           <div className="sa-topbarLeft">
             <h1 className="sa-title">Bienvenido, {welcomeRole}</h1>
-          </div>
-
-          <div className="sa-topbarRight">
-            <div className="sa-notifsWrap">
-              <button
-                type="button"
-                className="sa-iconBtn"
-                onClick={() => {
-                  setNotifsOpen((v) => !v)
-                }}
-                aria-label="Notificaciones"
-              >
-                <Icon name="bell" />
-                <span className="sa-notifDot" />
-              </button>
-              {notifsOpen && (
-                <div className="sa-dropdown sa-dropdownNotifs">
-                  <div className="sa-dropdownHeader">Notificaciones</div>
-                  <div className="sa-dropdownBody">
-                    {notifications.map((n) => (
-                      <div
-                        key={n.id}
-                        className={`sa-notif sa-notif-${n.kind}`}
-                      >
-                        <div className="sa-notifTitle">{n.title}</div>
-                        <div className="sa-notifMeta">{n.meta}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         </header>
 

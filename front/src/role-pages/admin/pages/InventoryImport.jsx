@@ -430,7 +430,7 @@ export default function InventoryImport() {
                 </div>
               )}
               <div style={{ marginTop: 12 }} className="sa-mutedBox">
-                Al confirmar, el backend insertará únicamente filas válidas en la tabla <b>recurso</b>.
+                Al confirmar, se guardaran los recursos cargados.
               </div>
             </Modal>
           </div>

@@ -17,7 +17,7 @@ function isValidEmail(value) {
 
 function isValidPhone(value) {
   const phone = normalizePhone(value)
-  return /^\d{7,}$/.test(phone)
+  return /^\d{10}$/.test(phone)
 }
 
 function isDuplicateEntryError(err) {
@@ -49,8 +49,8 @@ superAdminCompaniesRouter.get('/companies/:companyId/users', async (req, res) =>
 
   try {
     const [rows] = await pool.query(
-      'SELECT id_usuario AS id, nombre, correo, rol, estado, id_empresa FROM usuario WHERE id_empresa = ? AND rol = ? ORDER BY id_usuario DESC',
-      [Number(companyId), 'ADMIN']
+      'SELECT id_usuario AS id, nombre, correo, rol, estado, id_empresa FROM usuario WHERE id_empresa = ? AND LOWER(rol) = ? ORDER BY id_usuario DESC',
+      [Number(companyId), 'admin']
     )
 
     return res.json({ users: rows || [] })
@@ -68,6 +68,8 @@ superAdminCompaniesRouter.post('/companies', async (req, res) => {
   const normalizedNit = normalizeNit(nit)
 
   if (!nombre) return res.status(400).json({ message: 'nombre es requerido' })
+  if (!telefono) return res.status(400).json({ message: 'telefono es requerido' })
+  if (!isValidPhone(telefono)) return res.status(400).json({ message: 'Teléfono inválido: exactamente 10 dígitos' })
 
   try {
     if (normalizedNit) {
@@ -198,12 +200,14 @@ superAdminCompaniesRouter.post('/companies/:companyId/users', async (req, res) =
   const pool = getPool()
   const payload = req.body || {}
   const { companyId } = req.params
-  const { nombre, correo, telefono, password, estado } = payload
+  const { nombre, correo, password, estado } = payload
 
   if (!companyId) return res.status(400).json({ message: 'companyId es requerido' })
   if (!nombre || !correo || !password) return res.status(400).json({ message: 'nombre, correo y password son requeridos' })
   if (!isValidEmail(correo)) return res.status(400).json({ message: 'Email inválido' })
-  if (!isValidPhone(telefono)) return res.status(400).json({ message: 'Teléfono inválido: solo números y mínimo 7 dígitos' })
+
+  const passStr = String(password)
+  if (!/^\d{6}$/.test(passStr)) return res.status(400).json({ message: 'Password inválido: exactamente 6 dígitos numéricos' })
 
   try {
     const [existingEmail] = await pool.query('SELECT id_usuario FROM usuario WHERE correo = ? LIMIT 1', [correo])
@@ -241,8 +245,8 @@ superAdminCompaniesRouter.put('/companies/:companyId/users/:userId', async (req,
 
   try {
     const [existingUser] = await pool.query(
-      'SELECT id_usuario FROM usuario WHERE id_usuario = ? AND id_empresa = ? AND rol = ? LIMIT 1',
-      [Number(userId), Number(companyId), 'ADMIN']
+      'SELECT id_usuario FROM usuario WHERE id_usuario = ? AND id_empresa = ? AND LOWER(rol) = ? LIMIT 1',
+      [Number(userId), Number(companyId), 'admin']
     )
     if (!existingUser?.length) return res.status(404).json({ message: 'Administrador no encontrado' })
 
@@ -270,6 +274,41 @@ superAdminCompaniesRouter.put('/companies/:companyId/users/:userId', async (req,
   }
 })
 
+superAdminCompaniesRouter.put('/companies/:companyId/users/:userId/password', async (req, res) => {
+  const pool = getPool()
+  const { companyId, userId } = req.params
+  const payload = req.body || {}
+  const { password } = payload
+
+  if (!companyId || !userId) return res.status(400).json({ message: 'companyId y userId son requeridos' })
+  if (!password) return res.status(400).json({ message: 'password es requerido' })
+
+  const passStr = String(password)
+  if (!/^\d{6}$/.test(passStr)) {
+    return res.status(400).json({ message: 'Password inválido: exactamente 6 dígitos numéricos' })
+  }
+
+  try {
+    const [existingUser] = await pool.query(
+      'SELECT id_usuario FROM usuario WHERE id_usuario = ? AND id_empresa = ? AND LOWER(rol) = ? LIMIT 1',
+      [Number(userId), Number(companyId), 'admin']
+    )
+    if (!existingUser?.length) return res.status(404).json({ message: 'Administrador no encontrado' })
+
+    const hashed = await bcrypt.hash(passStr, 10)
+
+    await pool.query(
+      'UPDATE usuario SET password = ? WHERE id_usuario = ? AND id_empresa = ? AND LOWER(rol) = ?',
+      [hashed, Number(userId), Number(companyId), 'admin']
+    )
+
+    return res.json({ message: 'password actualizada correctamente' })
+  } catch (e) {
+    console.error('superAdminCompaniesRouter/companyUsers[PUT password]', e)
+    return res.status(500).json({ message: 'Error actualizando password', error: String(e?.message || e) })
+  }
+})
+
 superAdminCompaniesRouter.patch('/companies/:companyId/users/:userId/status', async (req, res) => {
   const pool = getPool()
   const { companyId, userId } = req.params
@@ -279,14 +318,14 @@ superAdminCompaniesRouter.patch('/companies/:companyId/users/:userId/status', as
 
   try {
     const [existingUser] = await pool.query(
-      'SELECT id_usuario FROM usuario WHERE id_usuario = ? AND id_empresa = ? AND rol = ? LIMIT 1',
-      [Number(userId), Number(companyId), 'ADMIN']
+      'SELECT id_usuario FROM usuario WHERE id_usuario = ? AND id_empresa = ? AND LOWER(rol) = ? LIMIT 1',
+      [Number(userId), Number(companyId), 'admin']
     )
     if (!existingUser?.length) return res.status(404).json({ message: 'Administrador no encontrado' })
 
     await pool.query(
-      'UPDATE usuario SET estado = ? WHERE id_usuario = ? AND id_empresa = ? AND rol = ?',
-      [Number(estado) === 1 ? 1 : 0, Number(userId), Number(companyId), 'ADMIN']
+      'UPDATE usuario SET estado = ? WHERE id_usuario = ? AND id_empresa = ? AND LOWER(rol) = ?',
+      [Number(estado) === 1 ? 1 : 0, Number(userId), Number(companyId), 'admin']
     )
 
     return res.json({ message: 'actualizado' })
@@ -310,8 +349,8 @@ superAdminCompaniesRouter.delete('/companies/:companyId/users/:userId', async (r
     if (!existingUser?.length) return res.status(404).json({ message: 'Administrador no encontrado' })
 
     await pool.query(
-      'DELETE FROM usuario WHERE id_usuario = ? AND id_empresa = ? AND rol = ?',
-      [Number(userId), Number(companyId), 'ADMIN']
+      'DELETE FROM usuario WHERE id_usuario = ? AND id_empresa = ? AND LOWER(rol) = ?',
+      [Number(userId), Number(companyId), 'admin']
     )
 
     return res.json({ message: 'eliminado' })

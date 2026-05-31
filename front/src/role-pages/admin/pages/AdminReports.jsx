@@ -147,7 +147,7 @@ export default function AdminReports() {
                   <div className="sa-cardIcon">📉</div>
                 </div>
                 <div className="sa-cardValue">{loading ? '...' : Number(data.financieros.PENDIENTE || 0) + Number(data.financieros.DEUDA || 0)}</div>
-                <div className="sa-cardHint">PENDIENTE + DEUDA</div>
+                <div className="sa-cardHint">PENDIENTE</div>
               </div>
               <div className="sa-card sa-card-success">
                 <div className="sa-cardTop">
@@ -164,7 +164,7 @@ export default function AdminReports() {
                 </div>
                 <div className="sa-cardValue">{loading ? '...' : financialTotal}</div>
                 <div className="sa-cardHint">
-                  P:{data.financieros.PENDIENTE} · Pa:{data.financieros.PARCIAL} · Pg:{data.financieros.PAGADO} · D:{data.financieros.DEUDA}
+                  Pendiente:{data.financieros.PENDIENTE} · Parcial:{data.financieros.PARCIAL} · Pagado:{data.financieros.PAGADO}
                 </div>
               </div>
               <div className="sa-card sa-card-critical">
