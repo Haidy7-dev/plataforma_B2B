@@ -419,7 +419,7 @@ export default function GestorReservasLayout() {
   return (
     <PremiumRoleLayout
       title="GESTOR DE RESERVAS"
-      roleLabel="Flujo operativo"
+      roleLabel="Gestor"
       links={[{ to: '/gestor', label: 'Inicio' }]}
     >
       <section className="sa-panel">

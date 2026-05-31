@@ -417,7 +417,7 @@ export default function InventoryImport() {
                 <div className="sa-finItem">
                   <div className="sa-finLabel">Válidas</div>
                   <div className="sa-finValue sa-finPositive">{validation?.validCount ?? 0}</div>
-                  <div className="sa-finHint">Se guardarán en tabla recurso</div>
+                  <div className="sa-finHint">Se guardarán en su inventario</div>
                 </div>
               </div>
               {validation?.errorCount ? (

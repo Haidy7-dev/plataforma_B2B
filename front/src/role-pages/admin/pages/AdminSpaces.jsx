@@ -213,7 +213,7 @@ export default function AdminSpaces() {
               </div>
 
               <button className="sa-btn sa-btnPrimary" onClick={openCreate} disabled={loading || saving}>
-                Crear espacio
+                + Crear espacio
               </button>
             </div>
 

@@ -334,7 +334,7 @@ export default function AdminUsers() {
                     <th>Correo</th>
                     <th>Rol</th>
                     <th>Estado</th>
-                    <th>Fecha creación</th>
+                    <th></th>
                     <th style={{ width: 320 }}>Acciones</th>
                   </tr>
                 </thead>

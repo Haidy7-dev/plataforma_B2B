@@ -144,17 +144,20 @@ export default function LogisticaLayout() {
       const idDetalleNum = Number(idDetalle)
       const estadoNext = String(nextEstado || '').toUpperCase()
 
+      // Evita "parpadeo" por clicks repetidos mientras hay request en curso
+      if (savingId === idDetalleNum) return
+
       console.debug('[logi][patch] start', { idDetalle: idDetalleNum, estado_logistica: estadoNext })
 
-      setSavingId(idDetalleNum)
-
-      // Optimistic update (sin recargar página)
-      // Snapshot deep-ish por id_detalle para poder revertir (tomado del estado actual)
+      // Snapshot deep-ish por id_detalle para poder revertir sin depender de 'reservas' en el closure
       const snapshot = reservas.map((r) => ({
         ...r,
         recursos: (Array.isArray(r.recursos) ? r.recursos : []).map((det) => ({ ...det }))
       }))
 
+      setSavingId(idDetalleNum)
+
+      // Optimistic update (sin recargar página)
       setReservas((prev) => {
         const nextReservas = prev.map((r) => {
           const recursos = (Array.isArray(r.recursos) ? r.recursos : []).map((det) => {
@@ -175,12 +178,14 @@ export default function LogisticaLayout() {
         })
         console.debug('[logi][patch] ok', { idDetalle: idDetalleNum, serverData })
 
-        // Reconciliación: asegurar estado con lo que devolvió el servidor
         setReservas((prev) => {
           const nextReservas = prev.map((r) => {
             const recursos = (Array.isArray(r.recursos) ? r.recursos : []).map((det) => {
               if (Number(det.id_detalle) !== idDetalleNum) return det
-              return { ...det, estado_logistica: String(serverData?.item?.estado_logistica || estadoNext).toUpperCase() }
+              return {
+                ...det,
+                estado_logistica: String(serverData?.item?.estado_logistica || estadoNext).toUpperCase()
+              }
             })
             const { estado_logistica, progreso, total_recursos } = computeReservaProgressFromRecursos(recursos)
             return { ...r, recursos, estado_logistica, progreso, total_recursos }
@@ -200,7 +205,7 @@ export default function LogisticaLayout() {
         setSavingId(null)
       }
     },
-    [request, reservas]
+    [request, reservas, savingId]
   )
 
   const toggleCheckbox = (idDetalle, estadoActual, action) => {
