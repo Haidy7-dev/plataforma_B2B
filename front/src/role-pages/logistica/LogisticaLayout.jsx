@@ -73,6 +73,21 @@ function clampPct(v) {
   return Math.max(0, Math.min(100, n))
 }
 
+function computeReservaProgressFromRecursos(recursos = []) {
+  const estados = (Array.isArray(recursos) ? recursos : []).map((x) => String(x?.estado_logistica || 'PENDIENTE').toUpperCase())
+  const total = estados.length
+  const preparados = estados.filter((s) => s === 'PREPARADO' || s === 'ENTREGADO').length
+  const entregados = estados.filter((s) => s === 'ENTREGADO').length
+
+  let estado_logistica = 'PENDIENTE'
+  if (total > 0 && entregados === total) estado_logistica = 'ENTREGADO'
+  else if (total > 0 && preparados === total) estado_logistica = 'PREPARADO'
+
+  const progreso = total > 0 ? Math.round((preparados / total) * 100) : 0
+
+  return { estado_logistica, progreso, total_recursos: total }
+}
+
 function ProgressBar({ value }) {
   const pct = clampPct(value)
   return (
@@ -90,51 +105,120 @@ export default function LogisticaLayout() {
   const [savingId, setSavingId] = React.useState(null)
 
   const load = React.useCallback(async () => {
+    console.debug('[logi][load] fetching checklist', { fecha })
     const data = await request(`/logistica/reservas-checklist?fecha=${encodeURIComponent(fecha)}`)
     const list = Array.isArray(data?.reservations)
       ? data.reservations
       : (Array.isArray(data?.reservas) ? data.reservas : [])
-    setReservas(list)
+    console.debug('[logi][load] checklist received', { count: list.length, sample: list[0]?.id_reserva })
+
+    // Asegurar forma consistente (evita render raro si backend manda tipos mixtos)
+    const normalized = list.map((r) => ({
+      ...r,
+      id_reserva: Number(r.id_reserva),
+      progreso: clampPct(r.progreso),
+      total_recursos: Number(r.total_recursos || r.total_recursos === 0 ? r.total_recursos : 0),
+      recursos: (Array.isArray(r.recursos) ? r.recursos : []).map((det) => ({
+        ...det,
+        id_detalle: Number(det.id_detalle),
+        id_recurso: Number(det.id_recurso),
+        cantidad: Number(det.cantidad || 0),
+        recurso: String(det.recurso || ''),
+        estado_logistica: String(det.estado_logistica || 'PENDIENTE').toUpperCase()
+      }))
+    }))
+
+    setReservas(normalized)
   }, [request, fecha])
 
   React.useEffect(() => {
-    load().catch(() => {})
+    load().catch((e) => {
+      console.error('[logi][load] failed', e)
+    })
   }, [load])
 
-  const updateDetalle = async (idDetalle, nextEstado) => {
-    if (!idDetalle) return
-    setSavingId(idDetalle)
-    const snapshot = reservas
+  const updateDetalle = React.useCallback(
+    async (idDetalle, nextEstado) => {
+      if (!idDetalle) return
 
-    try {
-      // optimismo mínimo: solo recargar al final (rápido por diseño)
-      await request(`/logistica/reservas-checklist/${idDetalle}/estado`, {
-        method: 'PATCH',
-        data: { estado_logistica: nextEstado }
+      const idDetalleNum = Number(idDetalle)
+      const estadoNext = String(nextEstado || '').toUpperCase()
+
+      console.debug('[logi][patch] start', { idDetalle: idDetalleNum, estado_logistica: estadoNext })
+
+      setSavingId(idDetalleNum)
+
+      // Optimistic update (sin recargar página)
+      // Snapshot deep-ish por id_detalle para poder revertir (tomado del estado actual)
+      const snapshot = reservas.map((r) => ({
+        ...r,
+        recursos: (Array.isArray(r.recursos) ? r.recursos : []).map((det) => ({ ...det }))
+      }))
+
+      setReservas((prev) => {
+        const nextReservas = prev.map((r) => {
+          const recursos = (Array.isArray(r.recursos) ? r.recursos : []).map((det) => {
+            if (Number(det.id_detalle) !== idDetalleNum) return det
+            return { ...det, estado_logistica: estadoNext }
+          })
+          const { estado_logistica, progreso, total_recursos } = computeReservaProgressFromRecursos(recursos)
+          return { ...r, recursos, estado_logistica, progreso, total_recursos }
+        })
+        return nextReservas
       })
-      await load()
-    } catch (e) {
-      setReservas(snapshot)
-    } finally {
-      setSavingId(null)
-    }
-  }
+
+      try {
+        const payload = { estado_logistica: estadoNext }
+        const serverData = await request(`/logistica/reservas-checklist/${idDetalleNum}/estado`, {
+          method: 'PATCH',
+          data: payload
+        })
+        console.debug('[logi][patch] ok', { idDetalle: idDetalleNum, serverData })
+
+        // Reconciliación: asegurar estado con lo que devolvió el servidor
+        setReservas((prev) => {
+          const nextReservas = prev.map((r) => {
+            const recursos = (Array.isArray(r.recursos) ? r.recursos : []).map((det) => {
+              if (Number(det.id_detalle) !== idDetalleNum) return det
+              return { ...det, estado_logistica: String(serverData?.item?.estado_logistica || estadoNext).toUpperCase() }
+            })
+            const { estado_logistica, progreso, total_recursos } = computeReservaProgressFromRecursos(recursos)
+            return { ...r, recursos, estado_logistica, progreso, total_recursos }
+          })
+          return nextReservas
+        })
+      } catch (e) {
+        console.error('[logi][patch] failed', {
+          idDetalle: idDetalleNum,
+          estado_logistica: estadoNext,
+          message: String(e?.response?.data?.message || e?.message || e),
+          responseData: e?.response?.data,
+          stack: e?.stack
+        })
+        setReservas(snapshot)
+      } finally {
+        setSavingId(null)
+      }
+    },
+    [request, reservas]
+  )
 
   const toggleCheckbox = (idDetalle, estadoActual, action) => {
-    // Mapeo operativo:
-    // - checkbox PREPARADO/CARGADO (agrupado): marca PREPARADO cuando está pendiente
-    // - checkbox ENTREGADO: marca ENTREGADO y bloquea otros
-    // action: 'PREPARADO' | 'ENTREGADO'
+    const estadoActualNorm = String(estadoActual || 'PENDIENTE').toUpperCase()
+
+    // Reglas para mantener consistencia con el UI:
+    // - "Entregado" es (operativamente) irreversible: si ya está ENTREGADO, no hacemos nada.
+    // - "Preparado" permite alternar PREPARADO <-> PENDIENTE, pero si está ENTREGADO no se puede desmarcar.
     if (action === 'ENTREGADO') {
-      const next = estadoActual === 'ENTREGADO' ? 'PREPARADO' : 'ENTREGADO'
-      updateDetalle(idDetalle, next)
+      if (estadoActualNorm === 'ENTREGADO') return
+      updateDetalle(idDetalle, 'ENTREGADO')
       return
     }
 
-    // PREPARADO: si está ENTREGADO, no permite desmarcar (operativa)
-    if (String(estadoActual || '').toUpperCase() === 'ENTREGADO') return
+    // action !== 'ENTREGADO' => PREPARADO
+    if (estadoActualNorm === 'ENTREGADO') return
 
-    const next = estadoActual === 'PREPARADO' ? 'PENDIENTE' : 'PREPARADO'
+    const next = estadoActualNorm === 'PREPARADO' ? 'PENDIENTE' : 'PREPARADO'
     updateDetalle(idDetalle, next)
   }
 
@@ -177,7 +261,7 @@ export default function LogisticaLayout() {
           ) : (
             <div className="logi-operationalList">
               {reservas.map((r) => (
-                <section key={r.id_reserva} className="logi-reservaBlock">
+                <section key={`res-${r.id_reserva}`} className="logi-reservaBlock">
                   <div className="logi-reservaHead">
                     <div>
                       <div className="logi-reservaTitle">Reserva #{r.id_reserva}</div>
@@ -221,7 +305,7 @@ export default function LogisticaLayout() {
                       const isPreparado = estado === 'PREPARADO' || estado === 'ENTREGADO'
 
                       return (
-                        <div key={det.id_detalle} className="logi-recursoRow">
+                        <div key={`det-${r.id_reserva}-${det.id_detalle}`} className="logi-recursoRow">
                           <div className="logi-recursoLeft">
                             <div className="logi-recursoNombre">
                               {det.cantidad} {det.recurso}
@@ -234,20 +318,31 @@ export default function LogisticaLayout() {
                           <div className="logi-recursoActions">
                             <label className="logi-checkChip" title="Marcar preparado/cargado">
                               <input
+                                aria-label={`Preparado reserva ${r.id_reserva} detalle ${det.id_detalle}`}
                                 type="checkbox"
                                 checked={isPreparado}
                                 disabled={savingId === det.id_detalle || isEntregado}
-                                onChange={(e) => toggleCheckbox(det.id_detalle, estado, 'PREPARADO')}
+                                onClick={(e) => {
+                                  // Evita que el último item/label ocasionalmente “pierda” el evento
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  toggleCheckbox(det.id_detalle, estado, 'PREPARADO')
+                                }}
                               />
                               <span>Preparado</span>
                             </label>
 
                             <label className="logi-checkChip" title="Marcar entregado">
                               <input
+                                aria-label={`Entregado reserva ${r.id_reserva} detalle ${det.id_detalle}`}
                                 type="checkbox"
                                 checked={isEntregado}
                                 disabled={savingId === det.id_detalle}
-                                onChange={(e) => toggleCheckbox(det.id_detalle, estado, 'ENTREGADO')}
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  toggleCheckbox(det.id_detalle, estado, 'ENTREGADO')
+                                }}
                               />
                               <span>Entregado</span>
                             </label>

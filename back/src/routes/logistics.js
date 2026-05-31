@@ -395,9 +395,12 @@ logisticsRouter.patch('/reservas-checklist/:idDetalle/estado', async (req, res) 
     const entregados = Number(checkRows?.[0]?.entregados || 0)
     const total = Number(checkRows?.[0]?.total || 0)
     if (total > 0 && entregados === total) {
+      // Evita WARN_DATA_TRUNCATED por incompatibilidad/longitud del campo estado_evento.
+      // Se usa un valor corto y consistente con lo que normalmente se maneja en la app.
+      const nuevoEstadoEvento = 'FINALIZADO'
       await conn.query(
         `UPDATE reserva SET estado_evento = ? WHERE id_reserva = ?`,
-        ['Lista para Evento', idReserva]
+        [nuevoEstadoEvento, idReserva]
       )
     }
 
