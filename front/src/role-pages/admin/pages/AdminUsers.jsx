@@ -500,7 +500,7 @@ export default function AdminUsers() {
                     </div>
 
                     <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.35 }}>
-                      La contraseña actual no se muestra (por seguridad).
+                       La contraseña actual no se muestra por seguridad. Desde aquí puedes asignar una nueva contraseña al usuario.
                     </div>
                   </div>
                 </div>

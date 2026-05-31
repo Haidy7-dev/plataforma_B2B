@@ -1,20 +1,40 @@
-- [ ] Backend: `back/src/routes/superAdminCompanies.js`
-  - [ ] Validar teléfono empresa: exactamente 10 dígitos en `POST /super-admin/companies`
-  - [ ] Ajustar validación de teléfono en `POST /super-admin/companies/:companyId/users` para que no falle si no se envía (se pide solo password 6 dígitos)
-  - [ ] Validar password admin: exactamente 6 dígitos numéricos en `POST /super-admin/companies/:companyId/users`
+# TODO - Rediseño Módulo Logística (solo reservas)
 
-- [ ] Frontend: `front/src/role-pages/super-admin/pages/SuperAdminEmpresas.jsx`
-  - [ ] En “Crear empresa”: agregar campo/validación teléfono exactamente 10 dígitos (required + pattern + min/max) y enviarlo al backend
-  - [ ] En “Crear administrador”: validar password exactamente 6 dígitos (required + pattern + min/max)
-  - [ ] Agregar eliminación de empresas con confirmación
-  - [ ] Tras eliminar: refrescar listado y limpiar selección/modales
+## Paso 1 — Backend (endpoint checklist)
+- [ ] Editar `back/src/routes/logistics.js`
+  - [ ] Ajustar `GET /logistica/reservas-checklist` para:
+    - [ ] Aceptar query `fecha` (default = hoy)
+    - [ ] Filtrar SOLO reservas para esa fecha
+    - [ ] Eliminar hardcode de cliente (`AND c.nombre = 'Dra Chulito'`) duplicado
+  - [ ] Incluir en el SELECT `rec.tipo` (si existe) y/o preparar agrupación futura
+  - [ ] Asegurar cálculo de progreso por reserva
 
-- [ ] Frontend: verificar que el inicio ya queda en “Usuarios/Empresa”
-  - [ ] Confirmar que `/super-admin` carga correctamente `EmpresasUsuarios` (ya modificado en `SuperAdminLayout.jsx`)
+## Paso 2 — Backend (cambio automático)
+- [ ] Editar `PATCH /logistica/reservas-checklist/:idDetalle/estado`
+  - [ ] Tras actualizar `detalle_reserva.estado_logistica`, verificar si TODOS los detalles de esa reserva cumplen “listo”
+  - [ ] Si corresponde, actualizar `reserva.estado_evento = 'Lista para Evento'` (según columna existente)
 
-- [ ] Pruebas manuales (critical-path)
-  - [ ] Crear empresa con teléfono distinto a 10 → debe fallar
-  - [ ] Crear empresa con teléfono de 10 dígitos → debe crear
-  - [ ] Crear admin con password distinto a 6 → debe fallar
-  - [ ] Crear admin con password 6 dígitos → debe crear
-  - [ ] Eliminar empresa → debe mostrar confirmación y eliminar correctamente
+## Paso 3 — Backend (seguridad y alcance)
+- [ ] Confirmar que no se exponen endpoints no requeridos en el frontend
+- [ ] (Opcional si aplica) Mantener solo lo necesario para rol logística (validación en router)
+
+## Paso 4 — Frontend UI operativa
+- [ ] Reemplazar `front/src/role-pages/logistica/LogisticaLayout.jsx`
+  - [ ] Eliminar módulos: rutas, seguimiento, inventario, incidencias, historial
+  - [ ] Crear vista única con:
+    - [ ] Selector de fecha + botón Actualizar
+    - [ ] Lista/cards de reservas para esa fecha
+    - [ ] Info básica: cliente, evento(estado_evento), espacio, fecha y horario
+    - [ ] Checklist por reserva con checkbox por recurso
+    - [ ] Estados como checkbox (preparado/cargado/entregado/verificado según mapeo)
+    - [ ] Progreso (%) por reserva
+  - [ ] Checkbox ejecuta `PATCH` y actualiza progreso en tiempo real (re-fetch rápido)
+
+## Paso 5 — Frontend estilos
+- [ ] Limpieza y ajuste de `front/src/role-pages/logistica/LogisticaStyles.css`
+  - [ ] Responsive cards y checklist
+  - [ ] Eliminar estilos de módulos eliminados
+
+## Paso 6 — Validación
+- [ ] Ejecutar `npm` scripts/arranque si corresponde
+- [ ] Probar en navegador: carga de reservas por fecha + marcado de checkboxes + cambio a “Lista para Evento”

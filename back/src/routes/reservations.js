@@ -160,8 +160,8 @@ async function calculateAndPersistDetails(conn, { id_reserva, recursos, id_empre
 
   for (const r of normalized) {
     await conn.query(
-      'INSERT INTO detalle_reserva (cantidad, subtotal, id_reserva, id_recurso) VALUES (?, ?, ?, ?)',
-      [Number(r.cantidad), Number(r.subtotal), Number(id_reserva), Number(r.id_recurso)]
+      'INSERT INTO detalle_reserva (cantidad, subtotal, id_reserva, id_recurso, estado_logistica) VALUES (?, ?, ?, ?, ?)',
+      [Number(r.cantidad), Number(r.subtotal), Number(id_reserva), Number(r.id_recurso), 'PENDIENTE']
     )
     total += Number(r.subtotal)
   }
@@ -608,8 +608,10 @@ reservationsRouter.post('/reservations', async (req, res) => {
   const pool = getPool()
   const conn = await pool.getConnection()
 
+  let stage = 'init'
   try {
     const payload = req.body || {}
+
     const {
       id_cliente,
       id_espacio,
@@ -623,58 +625,124 @@ reservationsRouter.post('/reservations', async (req, res) => {
       pago = null
     } = payload
 
+    const payloadSanitized = {
+      id_empresa: Number(id_empresa),
+      id_usuario: Number(id_usuario),
+      id_cliente,
+      id_espacio,
+      fecha_evento,
+      hora_inicio,
+      hora_fin,
+      recursos_isArray: Array.isArray(recursos),
+      recursos_len: Array.isArray(recursos) ? recursos.length : null,
+      recursos_preview: Array.isArray(recursos)
+        ? recursos.slice(0, 5).map((r) => {
+            if (r && typeof r === 'object') return { id_recurso: r.id_recurso ?? r.id, cantidad: r.cantidad }
+            return r
+          })
+        : null,
+      estado_evento,
+      estado_financiero,
+      cotizacion: Boolean(cotizacion),
+      pago_present: Boolean(pago),
+      pago_preview: pago && typeof pago === 'object'
+        ? { monto: pago.monto, metodo_pago: pago.metodo_pago, porcentaje: pago.porcentaje, estado_pago: pago.estado_pago }
+        : null
+    }
+
+    stage = 'validate-payload'
+    console.log('POST /reservations [1] payload (sanitizado):', payloadSanitized)
+
     if (!id_cliente || !id_espacio || !fecha_evento || !hora_inicio || !hora_fin) {
       return res.status(400).json({
-        message: 'Campos requeridos: id_cliente, id_espacio, fecha_evento, hora_inicio, hora_fin'
+        message: 'Campos requeridos: id_cliente, id_espacio, fecha_evento, hora_inicio, hora_fin',
+        stage
       })
     }
 
+    if (!Array.isArray(recursos)) {
+      return res.status(400).json({ message: 'recursos debe ser un array', stage })
+    }
+
     if (!ESTADOS_EVENTO_VALIDOS.has(String(estado_evento).toUpperCase())) {
-      return res.status(400).json({ message: 'estado_evento inválido' })
+      return res.status(400).json({ message: 'estado_evento inválido', stage })
     }
     if (!ESTADOS_FINANCIEROS_VALIDOS.has(String(estado_financiero).toUpperCase())) {
-      return res.status(400).json({ message: 'estado_financiero inválido' })
+      return res.status(400).json({ message: 'estado_financiero inválido', stage })
     }
 
     if (!isValidDateYYYYMMDD(String(fecha_evento))) {
-      return res.status(400).json({ message: 'fecha_evento inválida. Usa YYYY-MM-DD' })
+      return res.status(400).json({ message: 'fecha_evento inválida. Usa YYYY-MM-DD', stage })
     }
 
     const hi = normalizeTimeHHMMSS(String(hora_inicio))
     const hf = normalizeTimeHHMMSS(String(hora_fin))
-    if (!hi || !hf) return res.status(400).json({ message: 'hora_inicio/hora_fin inválidas' })
-    if (toSeconds(hi) >= toSeconds(hf)) return res.status(400).json({ message: 'hora_inicio debe ser menor a hora_fin' })
+    stage = 'validate-time'
+    if (!hi || !hf) {
+      return res.status(400).json({ message: 'hora_inicio/hora_fin inválidas', stage, hi, hf })
+    }
+    if (toSeconds(hi) >= toSeconds(hf)) {
+      return res.status(400).json({ message: 'hora_inicio debe ser menor a hora_fin', stage, hi, hf })
+    }
 
-    const [spaceRows] = await conn.query('SELECT id_espacio FROM espacio WHERE id_espacio = ? AND id_empresa = ? LIMIT 1', [Number(id_espacio), Number(id_empresa)])
-    if (!spaceRows?.length) return res.status(404).json({ message: 'Espacio no encontrado para tu empresa' })
+    stage = 'check-space'
+    const [spaceRows] = await conn.query(
+      'SELECT id_espacio FROM espacio WHERE id_espacio = ? AND id_empresa = ? LIMIT 1',
+      [Number(id_espacio), Number(id_empresa)]
+    )
+    if (!spaceRows?.length) return res.status(404).json({ message: 'Espacio no encontrado para tu empresa', stage })
 
+    stage = 'check-availability'
     const available = await ensureAvailability(conn, {
       id_espacio: Number(id_espacio),
       fecha_evento: String(fecha_evento),
       hora_inicio: hi,
       hora_fin: hf
     })
-    if (!available) return res.status(409).json({ message: 'El espacio no está disponible en ese horario' })
+    if (!available) return res.status(409).json({ message: 'El espacio no está disponible en ese horario', stage })
 
+    stage = 'begin-transaction'
     await conn.beginTransaction()
 
+    stage = 'insert-reserva'
     const [insReserva] = await conn.query(
       `INSERT INTO reserva
-      (fecha_evento, hora_inicio, hora_fin, estado_evento, estado_financiero, total, id_cliente, id_usuario, id_espacio)
-      VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-      [String(fecha_evento), hi, hf, String(estado_evento).toUpperCase(), String(estado_financiero).toUpperCase(), Number(id_cliente), Number(id_usuario), Number(id_espacio)]
+      (id_empresa, fecha_evento, hora_inicio, hora_fin, estado_evento, estado_financiero, total, id_cliente, id_usuario, id_espacio)
+      VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+      [
+        Number(id_empresa),
+        String(fecha_evento),
+        hi,
+        hf,
+        String(estado_evento).toUpperCase(),
+        String(estado_financiero).toUpperCase(),
+        Number(id_cliente),
+        Number(id_usuario),
+        Number(id_espacio)
+      ]
     )
 
     const id_reserva = Number(insReserva.insertId)
+    console.log('POST /reservations [2] reserva insert OK:', { stage, id_reserva })
+
+    stage = 'persist-detalle_reserva'
     const { total, recursos: recursosPersistidos } = await calculateAndPersistDetails(conn, {
       id_reserva,
       recursos,
       id_empresa
     })
 
+    console.log('POST /reservations [3] detalle_reserva persisted OK:', {
+      stage,
+      id_reserva,
+      total,
+      recursos_count: Array.isArray(recursosPersistidos) ? recursosPersistidos.length : 0
+    })
+
     let pagoInsertado = null
     if (pago && typeof pago === 'object') {
       const monto = Number(pago.monto || 0)
+      stage = 'insert-pago'
       if (monto > 0) {
         const metodo_pago = pago.metodo_pago ? String(pago.metodo_pago) : null
         const porcentaje = pago.porcentaje !== undefined ? Number(pago.porcentaje) : null
@@ -687,11 +755,13 @@ reservationsRouter.post('/reservations', async (req, res) => {
           [monto, metodo_pago, porcentaje, estado_pago, id_reserva]
         )
         pagoInsertado = { id_pago: insPago.insertId, monto, estado_pago }
+        console.log('POST /reservations [4] pago insert OK:', { stage, id_reserva, id_pago: insPago.insertId })
       }
     }
 
     let documentoInsertado = null
     if (Boolean(cotizacion)) {
+      stage = 'insert-documento'
       const ruta_archivo = JSON.stringify({
         cliente: Number(id_cliente),
         espacio: Number(id_espacio),
@@ -702,17 +772,33 @@ reservationsRouter.post('/reservations', async (req, res) => {
         ['COTIZACION', ruta_archivo, id_reserva]
       )
       documentoInsertado = { id_documento: insDoc.insertId, tipo_documento: 'COTIZACION' }
+      console.log('POST /reservations [5] documento insert OK:', { stage, id_reserva, id_documento: insDoc.insertId })
     }
 
-    await registrarAuditoria(conn, {
-      accion: 'CREAR_RESERVA',
-      descripcion: `Reserva ${id_reserva} creada por gestor`,
-      tabla_afectada: 'reserva',
-      id_registro: id_reserva,
-      id_usuario: id_usuario,
-      id_empresa: id_empresa
-    })
+    stage = 'auditoria'
+    try {
+      await registrarAuditoria(conn, {
+        accion: 'CREAR_RESERVA',
+        descripcion: `Reserva ${id_reserva} creada por gestor`,
+        tabla_afectada: 'reserva',
+        id_registro: id_reserva,
+        id_usuario: id_usuario,
+        id_empresa: id_empresa
+      })
+      console.log('POST /reservations [6] auditoria OK:', { stage, id_reserva })
+    } catch (audErr) {
+      console.error('registrarAuditoria falló al crear reserva:', {
+        stage,
+        id_reserva,
+        id_usuario,
+        id_empresa,
+        error: String(audErr?.message || audErr),
+        code: audErr?.code,
+        sqlMessage: audErr?.sqlMessage
+      })
+    }
 
+    stage = 'commit'
     await conn.commit()
 
     return res.status(201).json({
@@ -724,8 +810,30 @@ reservationsRouter.post('/reservations', async (req, res) => {
       documento: documentoInsertado
     })
   } catch (e) {
-    await conn.rollback()
-    return res.status(500).json({ message: 'Error creando reserva', error: String(e?.message || e) })
+    try {
+      await conn.rollback()
+    } catch (_) {}
+
+    const err = {
+      message: String(e?.message || e),
+      code: e?.code || null,
+      sqlMessage: e?.sqlMessage || null,
+      stack: e?.stack ? String(e.stack).split('\n').slice(0, 8).join('\n') : null
+    }
+
+    console.error('Error creando reserva (POST /reservations):', {
+      stage,
+      err,
+    })
+
+    return res.status(500).json({
+      message: 'Error creando reserva',
+      stage,
+      error: err.message,
+      code: err.code,
+      sqlMessage: err.sqlMessage,
+      stack: err.stack
+    })
   } finally {
     conn.release()
   }

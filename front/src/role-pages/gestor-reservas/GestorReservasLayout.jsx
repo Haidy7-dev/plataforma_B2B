@@ -163,13 +163,22 @@ export default function GestorReservasLayout() {
   }
 
   async function request(path, options = {}) {
-    const normalizedPath = String(path || '').startsWith('/api/')
-      ? String(path || '')
-      : `/api${String(path || '').startsWith('/') ? String(path || '') : `/${String(path || '')}`}`
+    // El backend monta rutas en la raíz: /gestor/..., /admin/..., etc.
+    // Por eso NO debemos anteponer /api aquí.
+    const normalizedPath = (() => {
+      const p = String(path || '').trim()
+      if (!p) return '/'
+      return p.startsWith('/') ? p : `/${p}`
+    })()
 
     let response
     try {
-      response = await fetch(normalizedPath, {
+      console.log('[GESTOR DEBUG] fetch ->', {
+        normalizedPath,
+        method: options.method || 'GET'
+      })
+
+      response = await fetch(`${API_BASE}${normalizedPath}`, {
         method: options.method || 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -178,18 +187,45 @@ export default function GestorReservasLayout() {
         },
         body: options.body ? JSON.stringify(options.body) : undefined
       })
-    } catch {
+    } catch (err) {
+      console.log('[GESTOR DEBUG] fetch error ->', err)
       throw new Error('No se pudo conectar con el servidor. Verifica que el backend esté activo en puerto 4000.')
     }
 
-    const data = await response.json().catch(() => ({}))
+    const data = await response.json().catch(() => null)
+
+    console.log('[GESTOR DEBUG] response <-', {
+      normalizedPath,
+      status: response?.status,
+      ok: response?.ok,
+      data: data ?? null
+    })
+
     if (!response.ok) {
-      const backendMessage = String(data?.message || data?.error || '').trim()
+      // Leer SIEMPRE el body para tener el motivo real del 404
+      let rawText = ''
+      try {
+        rawText = await response.text()
+      } catch {
+        rawText = ''
+      }
+
+      const parts = []
+      if (data?.message) parts.push(`message: ${String(data.message).trim()}`)
+      if (data?.stage) parts.push(`stage: ${String(data.stage).trim()}`)
+      if (data?.error) parts.push(`error: ${String(data.error).trim()}`)
+      if (data?.sqlMessage) parts.push(`sqlMessage: ${String(data.sqlMessage).trim()}`)
+      if (data?.code) parts.push(`code: ${String(data.code).trim()}`)
+
       const statusInfo = response?.status ? ` (HTTP ${response.status})` : ''
-      throw new Error(backendMessage || `Error en la solicitud${statusInfo}`)
+      const backendMessage = parts.length
+        ? `${parts.join(' | ')}${statusInfo}`
+        : `${String(rawText || data?.error || data?.message || '').trim()}${statusInfo}`
+
+      throw new Error(backendMessage)
     }
 
-    return data
+    return data || {}
   }
 
   useEffect(() => {
@@ -483,7 +519,8 @@ export default function GestorReservasLayout() {
                         className={`card-espacio ${activo ? 'seleccionado' : ''}`}
                         onClick={() => {
                           setField('espacio', espacio.nombre || '')
-                          setField('idEspacio', String(espacio.id))
+                          // Guardar como número para evitar mismatches/empty values
+                          setField('idEspacio', Number(espacio.id))
                         }}
                       >
                         <img src={imageSrc} alt={espacio.nombre || 'Espacio'} />

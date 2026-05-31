@@ -123,6 +123,15 @@
 .logi-emptyStateCenter{padding:28px 16px;text-align:center;font-weight:900;color:var(--muted);border:1px dashed rgba(148,163,184,0.35);border-radius:14px;background:rgba(248,250,252,0.7)}
 
 .logi-operationalList{display:flex;flex-direction:column;gap:12px}
+.logi-resSubLine{margin-top:4px;font-size:12px;color:var(--muted);font-weight:900}
+
+.logi-checkChip{display:inline-flex;align-items:center;gap:8px;user-select:none;font-weight:950;color:rgba(15,23,42,0.92)}
+.logi-checkChip input{width:16px;height:16px;accent-color:#F97316}
+
+.logi-recursoLeft{display:flex;flex-direction:column;gap:2px}
+.logi-recursoNombre{font-weight:1100}
+.logi-recursoHint{font-size:12px;color:var(--muted);font-weight:900}
+
 .logi-reservaBlock{border:1px solid rgba(148,163,184,0.22);border-radius:14px;background:#fff;padding:12px}
 .logi-reservaHead{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .logi-reservaTitle{font-weight:1100}

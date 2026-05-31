@@ -149,14 +149,7 @@ export default function AdminReports() {
                 <div className="sa-cardValue">{loading ? '...' : Number(data.financieros.PENDIENTE || 0) + Number(data.financieros.DEUDA || 0)}</div>
                 <div className="sa-cardHint">PENDIENTE</div>
               </div>
-              <div className="sa-card sa-card-success">
-                <div className="sa-cardTop">
-                  <div className="sa-cardTitle">Cumplimiento</div>
-                  <div className="sa-cardIcon">✅</div>
-                </div>
-                <div className="sa-cardValue">{loading ? '...' : `${data.cumplimiento}%`}</div>
-                <div className="sa-cardHint">FINALIZADO / total reservas</div>
-              </div>
+             
               <div className="sa-card sa-card-indigo">
                 <div className="sa-cardTop">
                   <div className="sa-cardTitle">Estados financieros</div>
@@ -167,14 +160,7 @@ export default function AdminReports() {
                   Pendiente:{data.financieros.PENDIENTE} · Parcial:{data.financieros.PARCIAL} · Pagado:{data.financieros.PAGADO}
                 </div>
               </div>
-              <div className="sa-card sa-card-critical">
-                <div className="sa-cardTop">
-                  <div className="sa-cardTitle">Incidencias</div>
-                  <div className="sa-cardIcon">⚠️</div>
-                </div>
-                <div className="sa-cardValue">{loading ? '...' : data.incidencias}</div>
-                <div className="sa-cardHint">Conteo real por empresa</div>
-              </div>
+            
             </div>
 
             <div style={{ marginTop: 16 }}>

@@ -159,15 +159,20 @@ logisticsRouter.get('/reservas-checklist', async (req, res) => {
     return res.status(403).json({ message: 'Rol no autorizado para checklist logística' })
   }
 
+  // fecha en formato YYYY-MM-DD (default = hoy)
+  const fechaQueryRaw = String(req.query?.fecha || '').trim()
+  const fechaHoy = new Date()
+  const fechaDefaultIso = fechaHoy.toISOString().slice(0, 10)
+  const fecha = fechaQueryRaw || fechaDefaultIso
+
+  const fechaInicio = `${fecha} 00:00:00`
+  const fechaFin = `${fecha} 23:59:59`
+
   const pool = getPool()
   let conn
   try {
-    console.log('[logistica][reservas-checklist] start', {
-      id_usuario,
-      id_empresa,
-      rol,
-      hasAuthHeader: Boolean(req.headers.authorization)
-    })
+    console.log('[logistica][reservas-checklist] start', { id_usuario, id_empresa, rol, fecha })
+
     conn = await pool.getConnection()
 
     const queryWithEstado = `
@@ -190,6 +195,7 @@ logisticsRouter.get('/reservas-checklist', async (req, res) => {
       INNER JOIN recurso rec ON rec.id_recurso = dr.id_recurso
       WHERE e.id_empresa = ?
         AND UPPER(COALESCE(r.estado_evento, '')) <> 'CANCELADO'
+        AND r.fecha_evento >= ? AND r.fecha_evento <= ?
       ORDER BY
         CASE
           WHEN COALESCE(dr.estado_logistica, 'PENDIENTE') = 'PENDIENTE' THEN 0
@@ -197,7 +203,6 @@ logisticsRouter.get('/reservas-checklist', async (req, res) => {
           WHEN COALESCE(dr.estado_logistica, 'PENDIENTE') = 'ENTREGADO' THEN 2
           ELSE 3
         END ASC,
-        r.fecha_evento ASC,
         r.hora_inicio ASC,
         r.id_reserva ASC,
         dr.id_detalle ASC
@@ -223,37 +228,26 @@ logisticsRouter.get('/reservas-checklist', async (req, res) => {
       INNER JOIN recurso rec ON rec.id_recurso = dr.id_recurso
       WHERE e.id_empresa = ?
         AND UPPER(COALESCE(r.estado_evento, '')) <> 'CANCELADO'
+        AND r.fecha_evento >= ? AND r.fecha_evento <= ?
       ORDER BY
         0 ASC,
-        r.fecha_evento ASC,
         r.hora_inicio ASC,
         r.id_reserva ASC,
         dr.id_detalle ASC
     `
 
-    console.log('[logistica][reservas-checklist] jwt id_empresa', Number(id_empresa))
-    console.log('[logistica][reservas-checklist] SQL queryWithEstado', queryWithEstado)
-    console.log('[logistica][reservas-checklist] SQL queryFallbackSinEstado', queryFallbackSinEstado)
-
     let rows
     try {
-      const [primaryRows] = await conn.query(queryWithEstado, [Number(id_empresa)])
+      const [primaryRows] = await conn.query(queryWithEstado, [Number(id_empresa), fechaInicio, fechaFin])
       rows = primaryRows
-      console.log('[logistica][reservas-checklist] queryWithEstado rows', rows?.length || 0)
-      console.log('[logistica][reservas-checklist] rows raw sample', rows?.slice?.(0, 3) || [])
     } catch (sqlErr) {
       const code = String(sqlErr?.code || '')
       const msg = String(sqlErr?.message || '')
       const shouldFallback = code === 'ER_BAD_FIELD_ERROR' || /unknown column/i.test(msg)
       if (!shouldFallback) throw sqlErr
-      console.error('[logistica][reservas-checklist] queryWithEstado failed, fallback', {
-        code: sqlErr?.code,
-        message: sqlErr?.message
-      })
-      const [fallbackRows] = await conn.query(queryFallbackSinEstado, [Number(id_empresa)])
+
+      const [fallbackRows] = await conn.query(queryFallbackSinEstado, [Number(id_empresa), fechaInicio, fechaFin])
       rows = fallbackRows
-      console.log('[logistica][reservas-checklist] queryFallbackSinEstado rows', rows?.length || 0)
-      console.log('[logistica][reservas-checklist] fallback rows raw sample', rows?.slice?.(0, 3) || [])
     }
 
     const groupedMap = new Map()
@@ -280,30 +274,30 @@ logisticsRouter.get('/reservas-checklist', async (req, res) => {
     }
 
     const reservations = Array.from(groupedMap.values()).map((reserva) => {
-      const estados = reserva.recursos.map((r) => r.estado_logistica)
+      const recursos = Array.isArray(reserva.recursos) ? reserva.recursos : []
+      const estados = recursos.map((r) => r.estado_logistica)
+
+      const total = estados.length
+      const preparados = estados.filter((s) => s === 'PREPARADO' || s === 'ENTREGADO').length
+      const entregados = estados.filter((s) => s === 'ENTREGADO').length
+
       let estado_logistica = 'PENDIENTE'
-      if (estados.length && estados.every((s) => s === 'ENTREGADO')) estado_logistica = 'ENTREGADO'
-      else if (estados.length && estados.every((s) => s !== 'PENDIENTE')) estado_logistica = 'PREPARADO'
+      if (total > 0 && entregados === total) estado_logistica = 'ENTREGADO'
+      else if (total > 0 && preparados === total) estado_logistica = 'PREPARADO'
+
+      const progreso = total > 0 ? Math.round((preparados / total) * 100) : 0
 
       return {
         ...reserva,
-        estado_logistica
+        estado_logistica,
+        progreso,
+        total_recursos: total
       }
     })
 
-    const recursosTotales = reservations.reduce((acc, r) => acc + (Array.isArray(r.recursos) ? r.recursos.length : 0), 0)
-    console.log('[logistica][reservas-checklist] reservations grouped', reservations.length)
-    console.log('[logistica][reservas-checklist] recursos totales', recursosTotales)
-    if (reservations.length) {
-      console.log('[logistica][reservas-checklist] sample reservation', reservations[0])
-    }
     return res.json({ reservations })
   } catch (e) {
-    console.error('[logistica][reservas-checklist] error', {
-      code: e?.code,
-      message: e?.message,
-      stack: e?.stack
-    })
+    console.error('[logistica][reservas-checklist] error', { code: e?.code, message: e?.message, stack: e?.stack })
     return res.status(500).json({
       message: 'Error listando checklist logístico',
       error: String(e?.message || e),
@@ -380,6 +374,31 @@ logisticsRouter.patch('/reservas-checklist/:idDetalle/estado', async (req, res) 
         id_usuario: id_usuario,
         id_empresa: id_empresa
       })
+    }
+
+    // Auto-actualización: si TODOS los recursos de la reserva están entregados/preparados, pasar a "Lista para Evento"
+    // (en esta implementación consideramos listo cuando todos están ENTREGADO)
+    const idReserva = Number(row.id_reserva)
+    const [checkRows] = await conn.query(
+      `
+      SELECT
+        SUM(CASE WHEN COALESCE(dr.estado_logistica, 'PENDIENTE') = 'ENTREGADO' THEN 1 ELSE 0 END) AS entregados,
+        COUNT(*) AS total
+      FROM detalle_reserva dr
+      INNER JOIN reserva r ON r.id_reserva = dr.id_reserva
+      INNER JOIN espacio e ON e.id_espacio = r.id_espacio
+      WHERE dr.id_reserva = ? AND e.id_empresa = ?
+      `,
+      [idReserva, Number(id_empresa)]
+    )
+
+    const entregados = Number(checkRows?.[0]?.entregados || 0)
+    const total = Number(checkRows?.[0]?.total || 0)
+    if (total > 0 && entregados === total) {
+      await conn.query(
+        `UPDATE reserva SET estado_evento = ? WHERE id_reserva = ?`,
+        ['Lista para Evento', idReserva]
+      )
     }
 
     await conn.commit()
