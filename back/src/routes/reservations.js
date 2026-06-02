@@ -1,4 +1,7 @@
 import express from 'express'
+import multer from 'multer'
+import fs from 'fs'
+import path from 'path'
 import { requireRole } from '../middleware/requireRole.js'
 import { authJwt } from '../middleware/authJwt.js'
 import { getPool } from '../services/mysql.js'
@@ -7,11 +10,20 @@ import { registrarAuditoria } from '../services/auditoriaService.js'
 export const reservationsRouter = express.Router()
 
 reservationsRouter.use(authJwt)
-reservationsRouter.use(requireRole(['gestor']))
+// Módulo de Espacios para flujo gestor + acceso completo de Administrador
+reservationsRouter.use(requireRole(['gestor', 'admin']))
 
 const ESTADOS_EVENTO_VALIDOS = new Set(['COTIZACION', 'CONFIRMADO', 'FINALIZADO', 'CANCELADO'])
 const ESTADOS_FINANCIEROS_VALIDOS = new Set(['PENDIENTE', 'PARCIAL', 'PAGADO', 'DEUDA'])
 const ESTADOS_PAGO_VALIDOS = new Set(['PENDIENTE', 'PARCIAL', 'PAGADO'])
+
+// ===== Espacios (CRUD + upload) =====
+const espaciosUploadDir = path.join(process.cwd(), 'back', 'uploads', 'espacios')
+fs.mkdirSync(espaciosUploadDir, { recursive: true })
+const storage = multer.memoryStorage()
+const uploadImage = multer({ storage })
+const imagenDefault = '/uploads/espacios/placeholder.png' // si no existe, el frontend usa fallback
+
 
 function isValidDateYYYYMMDD(value) {
   if (typeof value !== 'string') return false
@@ -518,6 +530,224 @@ reservationsRouter.get('/spaces', async (req, res) => {
       ok: false,
       message: 'Error listando espacios'
     })
+  }
+})
+
+// POST /spaces  (AdminSpaces.jsx crea/edita con POST/PUT)
+// body: nombre, capacidad, precio, estado, imagen
+reservationsRouter.post('/spaces', async (req, res) => {
+  const pool = getPool()
+  const id_empresa = req.user?.id_empresa
+  const id_usuario = req.user?.id_usuario
+
+  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
+  if (!id_usuario) return res.status(400).json({ message: 'id_usuario faltante en JWT' })
+
+  const payload = req.body || {}
+  const { nombre, capacidad, precio, estado = true, imagen = '' } = payload
+
+  if (!nombre || String(nombre).trim() === '') return res.status(400).json({ message: 'nombre es requerido' })
+  if (capacidad === undefined || capacidad === null || Number.isNaN(Number(capacidad))) {
+    return res.status(400).json({ message: 'capacidad es requerida y debe ser numérica' })
+  }
+  if (precio === undefined || precio === null || Number.isNaN(Number(precio))) {
+    return res.status(400).json({ message: 'precio es requerido y debe ser numérico' })
+  }
+
+  const estadoBool = Boolean(estado)
+  const imagenFinal = String(imagen || '').trim() || imagenDefault
+
+  try {
+    const [result] = await pool.query(
+      `
+      INSERT INTO espacio (nombre, capacidad, precio, estado, id_empresa, imagen)
+      VALUES (?, ?, ?, ?, ?, ?)
+      `,
+      [String(nombre).trim(), Number(capacidad), Number(precio), estadoBool ? 1 : 0, Number(id_empresa), imagenFinal]
+    )
+
+    const insertedId = result?.insertId
+    const [rows] = await pool.query(
+      `
+      SELECT
+        id_espacio AS id,
+        nombre,
+        capacidad,
+        precio,
+        estado,
+        id_empresa,
+        imagen
+      FROM espacio
+      WHERE id_espacio = ? AND id_empresa = ?
+      LIMIT 1
+      `,
+      [Number(insertedId), Number(id_empresa)]
+    )
+
+    const created = rows?.[0]
+    await registrarAuditoria(
+      null,
+      {
+        accion: 'CREAR_ESPACIO',
+        descripcion: `Espacio ${created?.nombre || insertedId} creado`,
+        tabla_afectada: 'espacio',
+        id_registro: Number(insertedId),
+        id_usuario: id_usuario,
+        id_empresa: Number(id_empresa)
+      }
+    ).catch(() => {})
+
+    return res.status(201).json({ ok: true, space: created })
+  } catch (e) {
+    return res.status(500).json({ message: 'Error creando espacio', error: String(e?.message || e) })
+  }
+})
+
+// PUT /spaces/:id  (AdminSpaces.jsx usa PUT)
+reservationsRouter.put('/spaces/:id', async (req, res) => {
+  const pool = getPool()
+  const id_empresa = req.user?.id_empresa
+  const id_usuario = req.user?.id_usuario
+
+  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
+  if (!id_usuario) return res.status(400).json({ message: 'id_usuario faltante en JWT' })
+
+  const id = Number(req.params.id)
+  if (!id) return res.status(400).json({ message: 'id inválido' })
+
+  const payload = req.body || {}
+  const { nombre, capacidad, precio, estado = true, imagen = '' } = payload
+
+  if (!nombre || String(nombre).trim() === '') return res.status(400).json({ message: 'nombre es requerido' })
+
+  const estadoBool = Boolean(estado)
+  const imagenFinal = String(imagen || '').trim() || imagenDefault
+
+  try {
+    // validar ownership
+    const [existing] = await pool.query(
+      'SELECT id_espacio FROM espacio WHERE id_espacio = ? AND id_empresa = ? LIMIT 1',
+      [id, Number(id_empresa)]
+    )
+    if (!existing?.length) return res.status(404).json({ message: 'Espacio no encontrado en tu empresa' })
+
+    await pool.query(
+      `
+      UPDATE espacio
+      SET nombre = ?,
+          capacidad = ?,
+          precio = ?,
+          estado = ?,
+          imagen = ?
+      WHERE id_espacio = ? AND id_empresa = ?
+      `,
+      [String(nombre).trim(), Number(capacidad), Number(precio), estadoBool ? 1 : 0, imagenFinal, id, Number(id_empresa)]
+    )
+
+    const [rows] = await pool.query(
+      `
+      SELECT
+        id_espacio AS id,
+        nombre,
+        capacidad,
+        precio,
+        estado,
+        id_empresa,
+        imagen
+      FROM espacio
+      WHERE id_espacio = ? AND id_empresa = ?
+      LIMIT 1
+      `,
+      [id, Number(id_empresa)]
+    )
+
+    return res.json({ ok: true, space: rows?.[0] })
+  } catch (e) {
+    return res.status(500).json({ message: 'Error editando espacio', error: String(e?.message || e) })
+  }
+})
+
+// DELETE /spaces/:id (AdminSpaces.jsx usa delete)
+reservationsRouter.delete('/spaces/:id', async (req, res) => {
+  const pool = getPool()
+  const id_empresa = req.user?.id_empresa
+  const id_usuario = req.user?.id_usuario
+
+  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
+  if (!id_usuario) return res.status(400).json({ message: 'id_usuario faltante en JWT' })
+
+  const id = Number(req.params.id)
+  if (!id) return res.status(400).json({ message: 'id inválido' })
+
+  try {
+    const [existing] = await pool.query(
+      'SELECT id_espacio, nombre FROM espacio WHERE id_espacio = ? AND id_empresa = ? LIMIT 1',
+      [id, Number(id_empresa)]
+    )
+    if (!existing?.length) return res.status(404).json({ message: 'Espacio no encontrado en tu empresa' })
+
+    await pool.query('DELETE FROM espacio WHERE id_espacio = ? AND id_empresa = ?', [id, Number(id_empresa)])
+
+    return res.json({ ok: true })
+  } catch (e) {
+    return res.status(500).json({ message: 'Error eliminando espacio', error: String(e?.message || e) })
+  }
+})
+
+// PATCH /spaces/:id/status  (requisito: activar/desactivar)
+// body: estado (boolean o 0/1)
+reservationsRouter.patch('/spaces/:id/status', async (req, res) => {
+  const pool = getPool()
+  const id_empresa = req.user?.id_empresa
+  const id_usuario = req.user?.id_usuario
+
+  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
+  if (!id_usuario) return res.status(400).json({ message: 'id_usuario faltante en JWT' })
+
+  const id = Number(req.params.id)
+  if (!id) return res.status(400).json({ message: 'id inválido' })
+
+  const payload = req.body || {}
+  const { estado } = payload
+  if (estado === undefined || estado === null) return res.status(400).json({ message: 'estado es requerido' })
+
+  const estadoBool = Boolean(estado)
+
+  try {
+    const [result] = await pool.query(
+      'UPDATE espacio SET estado = ? WHERE id_espacio = ? AND id_empresa = ?',
+      [estadoBool ? 1 : 0, id, Number(id_empresa)]
+    )
+
+    const affected =
+      typeof result?.affectedRows === 'number' ? result.affectedRows : (result?.[0]?.affectedRows ?? 0)
+
+    if (!affected) return res.status(404).json({ message: 'Espacio no encontrado en tu empresa' })
+
+    return res.json({ ok: true })
+  } catch (e) {
+    return res.status(500).json({ message: 'Error actualizando estado', error: String(e?.message || e) })
+  }
+})
+
+// POST /spaces/upload-image (AdminSpaces.jsx usa campo "image" y espera { imageUrl })
+reservationsRouter.post('/spaces/upload-image', uploadImage.single('image'), async (req, res) => {
+  const id_empresa = req.user?.id_empresa
+  if (!id_empresa) return res.status(400).json({ message: 'id_empresa faltante en JWT' })
+
+  try {
+    if (!req.file) return res.status(400).json({ message: 'Archivo de imagen requerido' })
+
+    const ext = path.extname(req.file.originalname || '').toLowerCase() || '.jpg'
+    const fileName = `espacio-${Date.now()}-${Math.floor(Math.random() * 1e6)}${ext}`
+    const outPath = path.join(espaciosUploadDir, fileName)
+
+    fs.writeFileSync(outPath, req.file.buffer)
+
+    const imageUrl = `/uploads/espacios/${fileName}`
+    return res.json({ ok: true, imageUrl })
+  } catch (e) {
+    return res.status(500).json({ message: 'Error subiendo imagen', error: String(e?.message || e) })
   }
 })
 

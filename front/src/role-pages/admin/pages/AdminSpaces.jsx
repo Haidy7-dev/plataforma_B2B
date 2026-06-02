@@ -77,7 +77,7 @@ export default function AdminSpaces() {
     setLoading(true)
     setError('')
     try {
-      const res = await axios.get(`${API_BASE}/admin/spaces`, {
+      const res = await axios.get(`${API_BASE}/gestor/spaces`, {
         params: { search: search || undefined },
         headers: authHeaders()
       })
@@ -137,7 +137,7 @@ export default function AdminSpaces() {
       const formData = new FormData()
       formData.append('image', file)
 
-      const res = await axios.post(`${API_BASE}/admin/spaces/upload-image`, formData, {
+      const res = await axios.post(`${API_BASE}/gestor/spaces/upload-image`, formData, {
         headers: { ...authHeaders(), 'Content-Type': 'multipart/form-data' }
       })
 
@@ -172,9 +172,9 @@ export default function AdminSpaces() {
       }
 
       if (editing?.id) {
-        await axios.put(`${API_BASE}/admin/spaces/${editing.id}`, payload, { headers: authHeaders() })
+        await axios.put(`${API_BASE}/gestor/spaces/${editing.id}`, payload, { headers: authHeaders() })
       } else {
-        await axios.post(`${API_BASE}/admin/spaces`, payload, { headers: authHeaders() })
+        await axios.post(`${API_BASE}/gestor/spaces`, payload, { headers: authHeaders() })
       }
 
       setModalOpen(false)
@@ -192,7 +192,7 @@ export default function AdminSpaces() {
     setLoading(true)
     setError('')
     try {
-      await axios.delete(`${API_BASE}/admin/spaces/${row.id}`, { headers: authHeaders() })
+      await axios.delete(`${API_BASE}/gestor/spaces/${row.id}`, { headers: authHeaders() })
       await fetchSpaces()
     } catch (e) {
       setError(String(e?.response?.data?.message || e?.message || e))

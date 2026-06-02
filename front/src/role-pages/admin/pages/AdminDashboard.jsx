@@ -25,13 +25,7 @@ function toneClassByFinancialStatus(status) {
   return 'sa-badge sa-badge-neutral'
 }
 
-function toneClassByEventStatus(status) {
-  const s = String(status || '').toUpperCase()
-  if (s === 'FINALIZADO') return 'sa-badge sa-badge-positive'
-  if (s === 'CANCELADO') return 'sa-badge sa-badge-critical'
-  if (s === 'CONFIRMADO') return 'sa-badge sa-badge-info'
-  return 'sa-badge sa-badge-neutral'
-}
+/* toneClassByEventStatus removida: ya no se usa en “Próximos eventos” */
 
 export default function AdminDashboard() {
   const { user, token } = useAuth()
@@ -41,29 +35,38 @@ export default function AdminDashboard() {
     activeUsers: 0,
     confirmedEvents: 0,
     pendingPayments: 0,
+    partialPayments: 0,
     finalizedEvents: 0,
     upcomingEvents: [],
     pendingPaymentsList: [],
+    partialPaymentsList: [],
     recentReservations: []
   })
 
   useEffect(() => {
     if (!token) return
 
+    let cancelled = false
+
     async function load() {
       try {
+        if (cancelled) return
         setLoading(true)
         setError('')
         const res = await axios.get(`${API_BASE}/admin/dashboard/stats`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         })
+        if (cancelled) return
+
         setStats({
           activeUsers: Number(res?.data?.activeUsers || 0),
           confirmedEvents: Number(res?.data?.confirmedEvents || 0),
           pendingPayments: Number(res?.data?.pendingPayments || 0),
+          partialPayments: Number(res?.data?.partialPayments || 0),
           finalizedEvents: Number(res?.data?.finalizedEvents || 0),
           upcomingEvents: Array.isArray(res?.data?.upcomingEvents) ? res.data.upcomingEvents : [],
           pendingPaymentsList: Array.isArray(res?.data?.pendingPaymentsList) ? res.data.pendingPaymentsList : [],
+          partialPaymentsList: Array.isArray(res?.data?.partialPaymentsList) ? res.data.partialPaymentsList : [],
           recentReservations: Array.isArray(res?.data?.recentReservations) ? res.data.recentReservations : []
         })
       } catch (e) {
@@ -71,11 +74,21 @@ export default function AdminDashboard() {
         const message = e?.response?.data?.message || e?.message || 'Error cargando dashboard'
         setError(status ? `${message} (HTTP ${status})` : String(message))
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     load()
+
+    // Actualización en tiempo real (polling suave)
+    const intervalId = setInterval(() => {
+      load()
+    }, 15000)
+
+    return () => {
+      cancelled = true
+      clearInterval(intervalId)
+    }
   }, [token])
 
   const upcomingTop5 = useMemo(() => (stats.upcomingEvents || []).slice(0, 5), [stats.upcomingEvents])
@@ -100,12 +113,16 @@ export default function AdminDashboard() {
                 <div className="sa-kpiLabel">Usuarios activos</div>
                 <div className="sa-kpiValue">{loading ? '...' : stats.activeUsers}</div>
               </div>
-            
+
               <div className="sa-kpi">
                 <div className="sa-kpiLabel">Pagos pendientes</div>
                 <div className="sa-kpiValue">{loading ? '...' : stats.pendingPayments}</div>
               </div>
-             
+
+              <div className="sa-kpi">
+                <div className="sa-kpiLabel">Pagos parciales</div>
+                <div className="sa-kpiValue">{loading ? '...' : stats.partialPayments}</div>
+              </div>
             </div>
 
             <div style={{ marginTop: 16 }}>
@@ -114,25 +131,34 @@ export default function AdminDashboard() {
                 <table className="sa-table">
                   <thead>
                     <tr>
-                      <th>Cliente</th>
+                      <th>Fecha del Evento</th>
                       <th>Espacio</th>
-                      <th>Fecha evento</th>
-                      <th>Estado evento</th>
-                      <th>Estado financiero</th>
+                      <th>Estado de Pago</th>
                     </tr>
                   </thead>
                   <tbody>
                     {upcomingTop5.length ? upcomingTop5.map((row) => (
                       <tr key={`up-${row.id_reserva}`}>
-                        <td>{row.cliente || '-'}</td>
-                        <td>{row.espacio || '-'}</td>
                         <td>{formatDate(row.fecha_evento)}</td>
-                        <td><span className={toneClassByEventStatus(row.estado_evento)}>{row.estado_evento || '-'}</span></td>
-                        <td><span className={toneClassByFinancialStatus(row.estado_financiero)}>{row.estado_financiero || '-'}</span></td>
+                        <td>
+                          {row.cliente ? `${row.cliente} - ${row.espacio || '-'}` : (row.espacio || '-')}
+                        </td>
+                        <td>
+                          <div style={{ display: 'grid', gap: 4 }}>
+                            <span className={toneClassByFinancialStatus(row.estado_financiero)}>
+                              {row.estado_evento || row.estado_financiero || '-'}
+                            </span>
+                            {row.estado_financiero ? (
+                              <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 800 }}>
+                                {row.estado_financiero}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
                       </tr>
                     )) : (
                       <tr>
-                        <td colSpan={5}><div className="sa-mutedBox">Sin próximos eventos.</div></td>
+                        <td colSpan={3}><div className="sa-mutedBox">Sin próximos eventos.</div></td>
                       </tr>
                     )}
                   </tbody>
@@ -163,6 +189,40 @@ export default function AdminDashboard() {
                     )) : (
                       <tr>
                         <td colSpan={4}><div className="sa-mutedBox">Sin pagos pendientes.</div></td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div className="sa-panelTitle" style={{ marginBottom: 10 }}>Pagos parciales</div>
+              <div className="sa-tableWrap">
+                <table className="sa-table">
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Fecha</th>
+                      <th>Total</th>
+                      <th>Valor Pagado</th>
+                      <th>Saldo Pendiente</th>
+                      <th>Estado Financiero</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(stats.partialPaymentsList || []).length ? (stats.partialPaymentsList || []).map((row) => (
+                      <tr key={`par-${row.id_reserva}`}>
+                        <td>{row.cliente || '-'}</td>
+                        <td>{formatDate(row.fecha_evento)}</td>
+                        <td>{formatMoney(row.total)}</td>
+                        <td>{formatMoney(row.valor_pagado)}</td>
+                        <td>{formatMoney(row.saldo_pendiente)}</td>
+                        <td><span className={toneClassByFinancialStatus(row.estado_financiero)}>{row.estado_financiero || '-'}</span></td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={6}><div className="sa-mutedBox">Sin pagos parciales</div></td>
                       </tr>
                     )}
                   </tbody>

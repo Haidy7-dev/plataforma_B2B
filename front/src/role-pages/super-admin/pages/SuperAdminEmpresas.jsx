@@ -104,10 +104,18 @@ export default function SuperAdminEmpresas() {
         return
       }
 
+      // Validación UI (frontend) - backend también valida
+      const correoStr = String(companyForm.correo || '').trim()
+      const isValidCompanyEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoStr)
+      if (!isValidCompanyEmail) {
+        showMessage('err', 'Ingrese un correo electrónico válido para la empresa.')
+        return
+      }
+
       // Validación UI extra (backend también valida)
       const telefonoStr = String(companyForm.telefono || '')
-      if (!/^\d{10}$/.test(telefonoStr)) {
-        showMessage('err', 'Teléfono inválido: debe tener exactamente 10 dígitos numéricos.')
+      if (!/^3\d{9}$/.test(telefonoStr)) {
+        showMessage('err', 'Ingrese un número de teléfono válido de 10 dígitos.')
         return
       }
 
@@ -243,7 +251,7 @@ export default function SuperAdminEmpresas() {
               <input
                 required
                 inputMode="numeric"
-                pattern="[0-9]{10}"
+                pattern="^3\d{9}$"
                 minLength={10}
                 maxLength={10}
                 value={companyForm.telefono}

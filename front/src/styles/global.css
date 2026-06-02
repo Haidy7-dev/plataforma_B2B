@@ -151,23 +151,34 @@ button{ font-family:inherit; }
 
 .sa-shell{
   display:flex;
-  min-height:100vh;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
   background: radial-gradient(900px 400px at 18% 0%, rgba(37,99,235,0.12), transparent 60%),
               radial-gradient(700px 380px at 86% 12%, rgba(129,93,174,0.12), transparent 60%),
               var(--bg);
+  align-items: stretch;
 }
 
 .sa-sidebar{
   width: 270px;
-  position: sticky;
-  top: 0;
-  height: 100vh;
+
+  /* Mantener sidebar sincronizada con la altura visible y el crecimiento del contenido */
+  min-height: 100vh;
+  min-height: 100dvh;
+
+  /* Evitar que el contenedor fije la altura y corte el footer */
+  height: auto;
+
   padding: 18px 16px;
   background: linear-gradient(180deg, rgba(15,23,42,0.98), rgba(15,23,42,0.92));
   border-right: 1px solid rgba(148,163,184,0.12);
   display:flex;
   flex-direction:column;
   gap: 18px;
+
+  /* Permitir que el fondo se extienda hasta el final de la página */
+  overflow: visible;
 }
 
 .sa-brand{
@@ -194,7 +205,16 @@ button{ font-family:inherit; }
 .sa-brandTop{ color: rgba(255,255,255,0.92); font-weight: 900; font-size: 13px; letter-spacing: 0.4px; }
 .sa-brandBottom{ color: rgba(255,255,255,0.70); font-weight: 800; font-size: 12px; }
 
-.sa-nav{ display:flex; flex-direction:column; gap: 8px; padding: 0 6px; }
+.sa-nav{
+  display:flex;
+  flex-direction:column;
+  gap: 8px;
+  padding: 0 6px;
+
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
 
 .sa-link{
   display:flex;
@@ -237,7 +257,14 @@ button{ font-family:inherit; }
   justify-content: center;
 }
 
-.sa-main{ flex:1; display:flex; flex-direction:column; min-width:0; }
+.sa-main{
+  flex: 1;
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
 
 .sa-topbar{
   position: sticky;
@@ -394,7 +421,13 @@ button{ font-family:inherit; }
 
 .sa-ddItem:hover{ background: rgba(37,99,235,0.08); }
 .sa-ddItemDanger{ color: var(--danger); }
-.sa-content{ padding: 18px 22px 38px; }
+.sa-content{
+  padding: 18px 22px 38px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .sa-container{ max-width: 1150px; margin: 0 auto; }
 .sa-stack{ display:flex; flex-direction:column; gap: 18px; }
 

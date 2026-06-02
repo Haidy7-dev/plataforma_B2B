@@ -17,7 +17,8 @@ function isValidEmail(value) {
 
 function isValidPhone(value) {
   const phone = normalizePhone(value)
-  return /^\d{10}$/.test(phone)
+  // Colombia: móvil 10 dígitos numéricos, debe iniciar con 3
+  return /^3\d{9}$/.test(phone)
 }
 
 function isDuplicateEntryError(err) {
@@ -69,7 +70,8 @@ superAdminCompaniesRouter.post('/companies', async (req, res) => {
 
   if (!nombre) return res.status(400).json({ message: 'nombre es requerido' })
   if (!telefono) return res.status(400).json({ message: 'telefono es requerido' })
-  if (!isValidPhone(telefono)) return res.status(400).json({ message: 'Teléfono inválido: exactamente 10 dígitos' })
+  if (!isValidPhone(telefono)) return res.status(400).json({ message: 'Ingrese un número de teléfono válido de 10 dígitos.' })
+  if (!isValidEmail(correo)) return res.status(400).json({ message: 'Ingrese un correo electrónico válido para la empresa.' })
 
   try {
     if (normalizedNit) {
@@ -128,6 +130,12 @@ superAdminCompaniesRouter.put('/companies/:companyId', async (req, res) => {
       }
     }
 
+    if (telefono !== undefined && telefono !== null && String(telefono).toString().trim().length > 0) {
+      if (!isValidPhone(telefono)) {
+        return res.status(400).json({ message: 'Ingrese un número de teléfono válido de 10 dígitos.' })
+      }
+    }
+
     await pool.query(
       'UPDATE empresa SET nombre = ?, nit = ?, correo = ?, telefono = ?, estado = ? WHERE id_empresa = ?',
       [nombre, normalizedNit, correo || null, telefono || null, estado ?? 1, Number(companyId)]
@@ -177,7 +185,7 @@ superAdminCompaniesRouter.get('/users/check-email', async (req, res) => {
   const excludeUserId = req.query?.excludeUserId ? Number(req.query.excludeUserId) : null
 
   if (!correo) return res.status(400).json({ message: 'correo es requerido' })
-  if (!isValidEmail(correo)) return res.status(400).json({ message: 'Email inválido' })
+  if (!isValidEmail(correo)) return res.status(400).json({ message: 'Ingrese un correo electrónico válido.' })
 
   try {
     let query = 'SELECT id_usuario FROM usuario WHERE correo = ? LIMIT 1'
@@ -204,7 +212,7 @@ superAdminCompaniesRouter.post('/companies/:companyId/users', async (req, res) =
 
   if (!companyId) return res.status(400).json({ message: 'companyId es requerido' })
   if (!nombre || !correo || !password) return res.status(400).json({ message: 'nombre, correo y password son requeridos' })
-  if (!isValidEmail(correo)) return res.status(400).json({ message: 'Email inválido' })
+  if (!isValidEmail(correo)) return res.status(400).json({ message: 'Ingrese un correo electrónico válido.' })
 
   const passStr = String(password)
   if (!/^\d{6}$/.test(passStr)) return res.status(400).json({ message: 'Password inválido: exactamente 6 dígitos numéricos' })
@@ -241,7 +249,7 @@ superAdminCompaniesRouter.put('/companies/:companyId/users/:userId', async (req,
 
   if (!companyId || !userId) return res.status(400).json({ message: 'companyId y userId son requeridos' })
   if (!nombre || !correo) return res.status(400).json({ message: 'nombre y correo son requeridos' })
-  if (!isValidEmail(correo)) return res.status(400).json({ message: 'Email inválido' })
+  if (!isValidEmail(correo)) return res.status(400).json({ message: 'Ingrese un correo electrónico válido.' })
 
   try {
     const [existingUser] = await pool.query(

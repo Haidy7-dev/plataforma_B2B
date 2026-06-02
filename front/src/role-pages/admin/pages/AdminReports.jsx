@@ -26,7 +26,9 @@ export default function AdminReports() {
     totalReservas: 0,
     financieros: { PENDIENTE: 0, PARCIAL: 0, PAGADO: 0, DEUDA: 0 },
     unpaidReservations: [],
-    upcomingEvents: []
+    upcomingEvents: [],
+    pendingPayments: [],
+    partialPayments: []
   })
 
   useEffect(() => {
@@ -52,7 +54,9 @@ export default function AdminReports() {
             DEUDA: Number(res?.data?.financieros?.DEUDA || 0)
           },
           unpaidReservations: Array.isArray(res?.data?.unpaidReservations) ? res.data.unpaidReservations : [],
-          upcomingEvents: Array.isArray(res?.data?.upcomingEvents) ? res.data.upcomingEvents : []
+          upcomingEvents: Array.isArray(res?.data?.upcomingEvents) ? res.data.upcomingEvents : [],
+          pendingPayments: Array.isArray(res?.data?.pendingPayments) ? res.data.pendingPayments : [],
+          partialPayments: Array.isArray(res?.data?.partialPayments) ? res.data.partialPayments : []
         })
       } catch (e) {
         const status = e?.response?.status
@@ -222,6 +226,62 @@ export default function AdminReports() {
                     }) : (
                       <tr>
                         <td colSpan={7}><div className="sa-mutedBox">Sin reservas sin pagar.</div></td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div className="sa-panelTitle" style={{ marginBottom: 10 }}>Pagos Pendientes</div>
+              <div className="sa-tableWrap">
+                <table className="sa-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha del Evento</th>
+                      <th>Espacio</th>
+                      <th>Estado de Pago</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data.pendingPayments || []).length ? (data.pendingPayments || []).map((row) => (
+                      <tr key={`pending-${row.id_reserva ?? `${row.fecha_evento}-${row.espacio}`}`}>
+                        <td>{formatDate(row.fecha_evento)}</td>
+                        <td>{row.espacio || '-'}</td>
+                        <td>{row.estado_financiero || '-'}</td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={3}><div className="sa-mutedBox">Sin pagos pendientes.</div></td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div className="sa-panelTitle" style={{ marginBottom: 10 }}>Pagos Parciales</div>
+              <div className="sa-tableWrap">
+                <table className="sa-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha del Evento</th>
+                      <th>Espacio</th>
+                      <th>Estado de Pago</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data.partialPayments || []).length ? (data.partialPayments || []).map((row) => (
+                      <tr key={`partial-${row.id_reserva ?? `${row.fecha_evento}-${row.espacio}`}`}>
+                        <td>{formatDate(row.fecha_evento)}</td>
+                        <td>{row.espacio || '-'}</td>
+                        <td>{row.estado_financiero || '-'}</td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={3}><div className="sa-mutedBox">Sin pagos parciales.</div></td>
                       </tr>
                     )}
                   </tbody>

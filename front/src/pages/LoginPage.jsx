@@ -4,11 +4,14 @@ import axios from 'axios'
 import { useAuth } from '../auth/AuthContext.jsx'
 import styles from './LoginPage.module.css'
 
+import loginIllustration from '../assets/WhatsApp Image 2026-05-31 at 8.01.14 PM.jpeg'
+
 const API_BASE = 'http://localhost:4000'
 
 export default function LoginPage() {
   const navigate = useNavigate()
   const { login, rolePath } = useAuth()
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -18,14 +21,28 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError(null)
+
     try {
-      const res = await axios.post(`${API_BASE}/auth/login`, { email, password })
-      // backend devuelve: { token, user }
-      login({ user: res.data.user, token: res.data.token })
-      const role = res.data?.user?.rol || res.data?.user?.role
+      const res = await axios.post(`${API_BASE}/auth/login`, {
+        email,
+        password
+      })
+
+      login({
+        user: res.data.user,
+        token: res.data.token
+      })
+
+      const role =
+        res.data?.user?.rol ||
+        res.data?.user?.role
+
       navigate(rolePath(role))
     } catch (err) {
-      const msg = err?.response?.data?.message || 'Error de login'
+      const msg =
+        err?.response?.data?.message ||
+        'Error de login'
+
       setError(String(msg))
     } finally {
       setLoading(false)
@@ -35,49 +52,65 @@ export default function LoginPage() {
   return (
     <div className={styles.page}>
       <div className={styles.card}>
-        <section className={styles.left}>
-          <div className={styles.leftInner}>
-            <div className={styles.brand}>
-              <div className={styles.logo}>7T</div>
-              <div>
-                <div style={{ fontWeight: 900, fontSize: 13, letterSpacing: 0.6, opacity: 0.95 }}>
-                  Plataforma
-                </div>
-                <div style={{ fontWeight: 900, fontSize: 16, opacity: 0.95 }}>Sevent</div>
-              </div>
-            </div>
 
-            <h1 className={styles.title}>Accede a tu cuenta</h1>
-            <p className={styles.subtitle}>
-              Inicia sesión para continuar de forma segura.
-            </p>
-          </div>
+        <section className={styles.left}>
+          <img
+            src={loginIllustration}
+            alt="Ilustración empresarial"
+            className={styles.illustration}
+          />
         </section>
 
         <section className={styles.right}>
-          <h2 className={styles.formTitle}>Iniciar Sesión</h2>
-          <p className={styles.formHint}>Ingresa con tu correo y contraseña para continuar.</p>
 
-          <form className={styles.row} onSubmit={onSubmit}>
+          <div className={styles.brand}>
+            <div className={styles.logo}>
+              7T
+            </div>
+
+            <div className={styles.brandText}>
+              <span>PLATAFORMA</span>
+              <h1>SEVENT</h1>
+            </div>
+          </div>
+
+          <h2 className={styles.formTitle}>
+            Iniciar Sesión
+          </h2>
+
+          <form
+            className={styles.row}
+            onSubmit={onSubmit}
+          >
             <div>
-              <label className={styles.label}>Correo</label>
+              <label className={styles.label}>
+                Correo Electrónico
+              </label>
+
               <input
                 className={styles.input}
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) =>
+                  setEmail(e.target.value)
+                }
                 type="email"
-                placeholder="Ejemplo: usuario@correo.com"
+                placeholder="usuario@correo.com"
                 required
                 autoComplete="email"
               />
             </div>
 
             <div>
-              <label className={styles.label}>Contraseña</label>
+              <label className={styles.label}>
+                Contraseña
+              </label>
+
               <input
                 className={styles.input}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) =>
+                  setPassword(e.target.value)
+                }
                 type="password"
                 placeholder="Ingresa tu contraseña"
                 required
@@ -85,17 +118,29 @@ export default function LoginPage() {
               />
             </div>
 
-            {error && <div className={styles.error}>{error}</div>}
+            {error && (
+              <div className={styles.error}>
+                {error}
+              </div>
+            )}
 
-            <button className={styles.button} disabled={loading} type="submit">
-              {loading ? 'Entrando...' : 'Entrar'}
+            <button
+              className={styles.button}
+              disabled={loading}
+              type="submit"
+            >
+              {loading
+                ? 'Entrando...'
+                : 'Iniciar Sesión'}
             </button>
           </form>
 
-          <div className={styles.footer}>© {new Date().getFullYear()} Plataforma Sevent</div>
+          <div className={styles.footer}>
+            © {new Date().getFullYear()} Plataforma Sevent
+          </div>
+
         </section>
       </div>
     </div>
   )
 }
-

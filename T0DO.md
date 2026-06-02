@@ -1,0 +1,3 @@
+- [ ] Update backend: implement activeUsers + upcomingEvents correct filters/order/limit and include required fields for frontend table cells.
+- [ ] Update frontend rendering for “Próximos eventos” to include cliente and estado de reserva without changing layout (reuse existing columns).
+- [ ] Verify dashboard loads real data (polling works) and filters by id_empresa coming from JWT.

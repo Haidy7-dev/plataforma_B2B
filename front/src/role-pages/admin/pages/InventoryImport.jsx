@@ -3,7 +3,6 @@ import Papa from 'papaparse'
 import axios from 'axios'
 import { useAuth } from '../../../auth/AuthContext.jsx'
 
-
 const API_BASE = 'http://localhost:4000'
 
 function Badge({ variant = 'neutral', children }) {
@@ -35,10 +34,10 @@ function Modal({ open, title, subtitle, children, onClose, footer }) {
         {footer ? <div className="sa-modalFooter">{footer}</div> : null}
       </div>
     </div>
-  )
+  ) 
 }
 
-const requiredHeaders = ['nombre', 'tipo', 'stock', 'precio', 'estado']
+const requiredHeaders = ['nombre', 'tipo', 'stock', 'precio','estado']
 
 
 function normalizeTipoForDisplay(v) {
@@ -64,7 +63,10 @@ export default function InventoryImport() {
     const map = new Map()
     if (!validation?.errors?.length) return map
     for (const e of validation.errors) {
-      map.set(e.row_number, e.error_message)
+      // backend (recursoImportService) usa: { fila, mensaje }
+      const rowNumber = e?.fila
+      const msg = e?.mensaje
+      if (rowNumber != null && msg) map.set(rowNumber, msg)
     }
     return map
   }, [validation])
@@ -79,7 +81,7 @@ export default function InventoryImport() {
 
       setParseError(null)
 
-      const res = await axios.get(`${API_BASE}/admin/inventory/template`, {
+      const res = await axios.get(`${API_BASE}/logistica/inventario/plantilla`, {
         responseType: 'blob',
         headers: { Authorization: `Bearer ${token}` }
       })
@@ -143,25 +145,30 @@ export default function InventoryImport() {
     setImportSummary(null)
 
     try {
+      if (!selectedFile) {
+        setParseError('Selecciona un CSV para validar.')
+        return
+      }
+
+      const token = localStorage.getItem('token')
       const formData = new FormData()
       formData.append('file', selectedFile)
 
-      const token = localStorage.getItem('token')
-      const res = await axios.post(
-        `${API_BASE}/admin/inventory/validate`,
-        { rows },
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-
-      setValidation({
-        ok: Boolean(res.data?.ok),
-        total: res.data?.total ?? 0,
-        validCount: res.data?.validCount ?? 0,
-        errorCount: res.data?.errorCount ?? 0,
-        errors: res.data?.errors || []
+      const res = await axios.post(`${API_BASE}/logistica/inventario/preview`, formData, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
       })
 
-      if ((res.data?.errorCount ?? 0) > 0) return
+      // Backend responde: { success, total, validos, invalidos, errores, preview }
+      setValidation({
+        ok: Boolean(res.data?.success),
+        total: res.data?.total ?? 0,
+        validCount: res.data?.validos ?? 0,
+        errorCount: res.data?.invalidos ?? 0,
+        // backend (recursoImportService) devuelve: errors = [{ fila, mensaje }]
+        errors: res.data?.errores || []
+      })
+
+      if ((res.data?.invalidos ?? 0) > 0) return
       setConfirmOpen(true)
     } catch (e) {
       setParseError(String(e?.response?.data?.message || e?.message || e))
@@ -175,17 +182,24 @@ export default function InventoryImport() {
     setImportSummary(null)
 
     try {
-      const token = localStorage.getItem('token')
-      const res = await axios.post(
-        `${API_BASE}/admin/inventory/import`,
-        { originalFilename: fileName || null, rows },
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
+      if (!selectedFile) {
+        setParseError('Selecciona un CSV para importar.')
+        return
+      }
 
+      const token = localStorage.getItem('token')
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+
+      const res = await axios.post(`${API_BASE}/logistica/inventario/importar`, formData, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+      })
+
+      // Backend responde: { success, insertados, validos, invalidos, errores }
       setImportSummary({
-        status: res.data?.status || (res.data?.ok ? 'SUCCESS' : 'ERROR'),
-        createdCount: res.data?.createdCount ?? 0,
-        updatedCount: res.data?.updatedCount ?? 0
+        status: res.data?.success ? 'SUCCESS' : 'ERROR',
+        createdCount: res.data?.insertados ?? res.data?.validos ?? 0,
+        updatedCount: 0
       })
       setConfirmOpen(false)
 
@@ -224,7 +238,7 @@ export default function InventoryImport() {
               <div>
                 <div className="sa-panelTitle">Importación masiva CSV (ADMIN)</div>
                 <div className="sa-panelSub">
-                  Importa recursos CSV del módulo admin. Formato esperado por backend: nombre, tipo, stock, precio, estado.
+                  Importa recursos CSV del módulo admin. Formato esperado por backend: nombre, tipo, stock, precio. (estado e id_empresa se completan automáticamente)
                 </div>
               </div>
               <Badge variant="info">id_empresa: {user?.id_empresa ?? '-'}</Badge>
@@ -244,7 +258,7 @@ export default function InventoryImport() {
                 <div>
                   <div style={{ fontWeight: 1100, color: 'var(--text)' }}>Arrastra y suelta tu CSV aquí</div>
                   <div style={{ marginTop: 6, fontWeight: 850, color: 'var(--muted)', fontSize: 12 }}>
-                    Columnas: {requiredHeaders.join(', ')}
+                    Columnas (obligatorias): {requiredHeaders.join(', ')}
                   </div>
                 </div>
 
@@ -308,12 +322,13 @@ export default function InventoryImport() {
                         <th style={{ width: 120 }}>Stock</th>
                         <th style={{ width: 140 }}>Precio</th>
                         <th style={{ width: 120 }}>Estado</th>
+                        <th style={{ width: 140 }}>id_empresa</th>
                       </tr>
                     </thead>
                     <tbody>
                       {rows.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="sa-tdMuted">
+                          <td colSpan={7} className="sa-tdMuted">
                             No hay datos cargados.
                           </td>
                         </tr>
@@ -335,7 +350,8 @@ export default function InventoryImport() {
                               <td className={err ? '' : 'sa-tdStrong'}>{normalizeTipoForDisplay(r.tipo)}</td>
                               <td>{String(r.stock ?? '')}</td>
                               <td>{String(r.precio ?? '')}</td>
-                              <td>{String(r.estado ?? '')}</td>
+                              <td>{r.estado != null && String(r.estado ?? '').trim() !== '' ? String(r.estado) : '-'}</td>
+                              <td>{r.id_empresa != null && String(r.id_empresa ?? '').trim() !== '' ? String(r.id_empresa) : '-'}</td>
                             </tr>
                           )
                         })

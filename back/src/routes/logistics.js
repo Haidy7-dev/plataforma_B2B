@@ -27,8 +27,13 @@ const csvColumns = [
   'tipo',
   'stock',
   'precio',
-  'estado'
+  'estado',
+  'id_empresa'
 ]
+
+// Importación CSV ADMIN -> tabla `recurso`
+// SOLO obligatorias desde CSV (el sistema completa el resto)
+const RECURSO_IMPORT_REQUIRED_HEADERS = ['nombre', 'tipo', 'stock', 'precio', 'estado', 'id_empresa']
 
 const recursoCsvColumns = [...RECURSO_COLUMNS]
 const upload = multer({ storage: multer.memoryStorage() })
@@ -93,7 +98,17 @@ const headerAliasMap = {
 }
 
 function normalizeHeader(h = '') {
-  return String(h).trim().toLowerCase().replace(/\s+/g, '_')
+  // Normalización robusta de encabezados:
+  // - trim
+  // - lower
+  // - colapsar espacios
+  // - opcionalmente normalizar acentos para que "NOMBRE" / "nombre" / "Nombre" coincidan
+  return String(h)
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // quitar tildes
+    .replace(/\s+/g, '_')
 }
 
 function normalizeCsvParsed(parsed) {
@@ -693,11 +708,13 @@ logisticsRouter.get('/inventario/plantilla', (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
   res.setHeader('Content-Disposition', 'attachment; filename="plantilla_recurso.csv"')
 
+  // Plantilla alineada con el esquema requerido (sin estado ni id_empresa)
+  const headers = RECURSO_IMPORT_REQUIRED_HEADERS
   const rows = [
-    recursoCsvColumns.join(','),
-    'Laptop,Tecnología,15,2500000,1,1',
-    'Silla,Mobiliario,40,180000,1,1',
-    'VideoBeam,Equipos,8,3200000,1,2'
+    headers.join(','),
+    'Laptop,Tecnología,15,2500000',
+    'Silla,Mobiliario,40,180000',
+    'VideoBeam,Equipos,8,3200000'
   ]
 
   res.send(`${rows.join('\n')}\n`)
@@ -710,12 +727,22 @@ logisticsRouter.post('/inventario/preview', upload.single('file'), async (req, r
     const csvText = req.file.buffer.toString('utf8')
     const { headers, rows } = parseCsvText(csvText)
 
-    if (!headers.length) {
+    // Debug/log (requerido por el objetivo)
+    const expected = RECURSO_IMPORT_REQUIRED_HEADERS
+    const found = headers || []
+    const missingHeaders = expected.filter((h) => !found.includes(h))
+
+    console.log('[inventario][preview][csv] foundHeaders=', found)
+    console.log('[inventario][preview][csv] expectedHeaders=', expected)
+    console.log('[inventario][preview][csv] missingHeaders=', missingHeaders)
+
+    if (!found.length) {
+      console.log('[inventario][preview][csv] rechazo=', 'headers vacíos')
       return res.status(400).json({ success: false, message: 'CSV vacío o inválido' })
     }
 
-    const missingHeaders = recursoCsvColumns.filter((h) => !headers.includes(h))
     if (missingHeaders.length) {
+      console.log('[inventario][preview][csv] rechazo=', 'Faltan columnas obligatorias')
       return res.status(400).json({
         success: false,
         message: 'Faltan columnas obligatorias',
@@ -723,7 +750,24 @@ logisticsRouter.post('/inventario/preview', upload.single('file'), async (req, r
       })
     }
 
-    const { validRows, errors } = await validateRecursoRows(rows)
+    // RecursoImportService valida nombre/tipo/stock/precio,
+    // pero también valida estado/id_empresa con la versión actual.
+    // Para el preview, asignamos defaults para que NO bloquee columnas no requeridas.
+    const idEmpresaDesdeJWT = Number(req.user?.id_empresa || req.user?.id_empresa_jwt || 0) || null
+
+    const rowsWithDefaults = rows.map((r) => ({
+      ...r,
+      id_empresa: idEmpresaDesdeJWT ?? r.id_empresa ?? '',
+      estado: r.estado ?? '1'
+    }))
+
+    const { validRows, errors } = await validateRecursoRows(rowsWithDefaults)
+
+    // Debug/log de diferencias
+    if (errors?.length) {
+      console.log('[inventario][preview] validRows=', validRows?.length || 0)
+      console.log('[inventario][preview] invalidErrors=', errors)
+    }
 
     return res.json({
       success: true,
@@ -749,12 +793,22 @@ logisticsRouter.post('/inventario/importar', upload.single('file'), async (req, 
     const csvText = req.file.buffer.toString('utf8')
     const { headers, rows } = parseCsvText(csvText)
 
-    if (!headers.length) {
+    const expected = RECURSO_IMPORT_REQUIRED_HEADERS
+    const found = headers || []
+    const missingHeaders = expected.filter((h) => !found.includes(h))
+
+    // Debug/log (requerido por el objetivo)
+    console.log('[inventario][importar][csv] foundHeaders=', found)
+    console.log('[inventario][importar][csv] expectedHeaders=', expected)
+    console.log('[inventario][importar][csv] missingHeaders=', missingHeaders)
+
+    if (!found.length) {
+      console.log('[inventario][importar][csv] rechazo=', 'headers vacíos')
       return res.status(400).json({ success: false, message: 'CSV vacío o inválido' })
     }
 
-    const missingHeaders = recursoCsvColumns.filter((h) => !headers.includes(h))
     if (missingHeaders.length) {
+      console.log('[inventario][importar][csv] rechazo=', 'Faltan columnas obligatorias')
       return res.status(400).json({
         success: false,
         message: 'Faltan columnas obligatorias',
@@ -762,8 +816,20 @@ logisticsRouter.post('/inventario/importar', upload.single('file'), async (req, 
       })
     }
 
-    const { validRows, errors } = await validateRecursoRows(rows)
+    const idEmpresaDesdeJWT = Number(req.user?.id_empresa || req.user?.id_empresa_jwt || 0) || null
+
+    const rowsWithDefaults = rows.map((r) => ({
+      ...r,
+      id_empresa: idEmpresaDesdeJWT ?? r.id_empresa ?? '',
+      estado: r.estado ?? '1'
+    }))
+
+    const { validRows, errors } = await validateRecursoRows(rowsWithDefaults)
     const { insertados } = await insertRecursos(validRows)
+
+    if (errors?.length) {
+      console.log('[inventario][importar] invalidErrors=', errors)
+    }
 
     return res.json({
       success: true,
@@ -787,7 +853,11 @@ logisticsRouter.post('/inventory/import/preview', (req, res) => {
   if (!parsed || !parsed.headers) return res.status(400).json({ message: 'CSV vacío o inválido' })
 
   const normalized = normalizeCsvParsed(parsed)
-  const missingHeaders = csvColumns.filter((h) => !normalized.headers.includes(h))
+
+  // Para mantener compatibilidad con el flujo de inventario (ADMIN) y el template,
+  // estado NO es obligatorio. Si no viene, se asume un default.
+  const requiredForPreview = ['nombre', 'tipo', 'stock', 'precio']
+  const missingHeaders = requiredForPreview.filter((h) => !normalized.headers.includes(h))
   if (missingHeaders.length) {
     return res.status(400).json({ message: 'Faltan columnas obligatorias', missingHeaders })
   }
@@ -804,10 +874,15 @@ logisticsRouter.post('/inventory/import/preview', (req, res) => {
       tipo: String(row.tipo || '').trim(),
       stock: row.stock,
       precio: row.precio,
+      // estado opcional
       estado: row.estado
     }
     const v = validateInventoryRow(candidate, existingKeys)
     if (v.valid) existingKeys.add(v.key)
+
+    // Default si no viene estado: activo (true)
+    const estadoDefault = candidate.estado == null || String(candidate.estado).trim() === '' ? 'true' : candidate.estado
+
     return {
       index: index + 2,
       row: {
@@ -815,7 +890,7 @@ logisticsRouter.post('/inventory/import/preview', (req, res) => {
         tipo: candidate.tipo,
         stock: asNum(candidate.stock, 0),
         precio: asNum(candidate.precio, 0),
-        estado: parseEstadoToBoolean(candidate.estado)
+        estado: parseEstadoToBoolean(estadoDefault)
       },
       valid: v.valid,
       errors: v.errors

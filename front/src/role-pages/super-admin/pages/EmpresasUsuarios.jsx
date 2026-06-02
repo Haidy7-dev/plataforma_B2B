@@ -52,6 +52,18 @@ export default function EmpresasUsuarios() {
     }, 3500)
   }
 
+  function isValidEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim())
+  }
+
+  const correoError = editModalOpen
+    ? editForm.correo && !isValidEmail(editForm.correo)
+      ? 'Ingrese un correo electrónico válido.'
+      : null
+    : null
+
+  const canSaveEdit = !savingEdit && !correoError
+
   async function fetchCompanies() {
     const token = localStorage.getItem('token')
     if (!token) throw new Error('No hay token. Vuelve a iniciar sesión.')
@@ -159,6 +171,11 @@ export default function EmpresasUsuarios() {
 
   async function submitEditUser(e) {
     e.preventDefault()
+    if (!canSaveEdit) {
+      showMessage('err', correoError || 'Datos inválidos.')
+      return
+    }
+
     const token = localStorage.getItem('token')
     if (!token) {
       showMessage('err', 'No hay token. Vuelve a iniciar sesión.')
@@ -533,10 +550,18 @@ export default function EmpresasUsuarios() {
                   <input
                     value={editForm.correo}
                     onChange={(e) => setEditForm((p) => ({ ...p, correo: e.target.value }))}
-                    style={{ width: '100%', padding: 10, borderRadius: 12, border: '1px solid #CBD5E1' }}
+                    style={{
+                      width: '100%',
+                      padding: 10,
+                      borderRadius: 12,
+                      border: correoError ? '1px solid #EF4444' : '1px solid #CBD5E1'
+                    }}
                     type="email"
                     required
                   />
+                  {correoError ? (
+                    <div style={{ marginTop: 6, fontSize: 12, fontWeight: 800, color: '#B91C1C' }}>{correoError}</div>
+                  ) : null}
                 </Field>
               </div>
 
@@ -575,8 +600,16 @@ export default function EmpresasUsuarios() {
                 </button>
                 <button
                   type="submit"
-                  disabled={savingEdit}
-                  style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid #10B981', background: '#10B981', color: 'white', fontWeight: 900 }}
+                  disabled={!canSaveEdit}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: 12,
+                    border: '1px solid #10B981',
+                    background: canSaveEdit ? '#10B981' : '#A7F3D0',
+                    color: 'white',
+                    fontWeight: 900,
+                    cursor: canSaveEdit ? 'pointer' : 'not-allowed'
+                  }}
                 >
                   {savingEdit ? 'Guardando...' : 'Guardar'}
                 </button>
