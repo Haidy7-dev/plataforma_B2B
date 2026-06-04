@@ -146,32 +146,7 @@ adminRouter.get('/dashboard/stats', async (req, res) => {
       [Number(id_empresa), PENDING_STATE]
     )
 
-    // =========================
-    // Eventos próximos (Dashboard Admin)
-    // =========================
-    // Filtra por empresa autenticada + fecha >= ahora + excluye cancelados.
-    // Importante: React espera columnas con estos aliases:
-    // cliente, espacio, fecha_evento, estado_evento, estado_financiero, id_reserva
-    const [upcomingRows] = await pool.query(
-      `
-      SELECT
-        r.id_reserva,
-        c.nombre AS cliente,
-        e.nombre AS espacio,
-        r.fecha_evento,
-        r.estado_evento,
-        r.estado_financiero
-      FROM reserva r
-      INNER JOIN espacio e ON e.id_espacio = r.id_espacio
-      INNER JOIN cliente c ON c.id_cliente = r.id_cliente
-      WHERE e.id_empresa = ?
-        AND r.fecha_evento >= CURDATE()
-        AND (UPPER(TRIM(r.estado_evento)) <> 'CANCELADO')
-      ORDER BY r.fecha_evento ASC, r.id_reserva ASC
-      LIMIT 5
-      `,
-      [Number(id_empresa)]
-    )
+  
 
     return res.json({
       activeUsers,
@@ -275,31 +250,6 @@ adminRouter.get('/reports/summary', async (req, res) => {
       [Number(id_empresa), ...allFinancialStatesForUnpaid]
     )
 
-    // ====================
-    // Eventos próximos (upcomingEvents)
-    // ====================
-    // Si tu esquema no maneja estado_evento/fecha_evento de forma homogénea,
-    // devolvemos lista vacía para evitar 404/500.
-    const [upcomingRows] = await pool.query(
-      `
-      SELECT
-        r.id_reserva,
-        c.nombre AS cliente,
-        e.nombre AS espacio,
-        r.fecha_evento,
-        r.estado_evento,
-        r.estado_financiero,
-        COALESCE(r.total, 0) AS total
-      FROM reserva r
-      INNER JOIN espacio e ON e.id_espacio = r.id_espacio
-      INNER JOIN cliente c ON c.id_cliente = r.id_cliente
-      WHERE e.id_empresa = ?
-        AND r.fecha_evento >= NOW()
-      ORDER BY r.fecha_evento ASC
-      LIMIT 10
-      `,
-      [Number(id_empresa)]
-    )
 
     // ====================
     // Pagos Pendientes y Pagos Parciales (solo fecha_evento, espacio, estado_financiero)
@@ -346,7 +296,6 @@ adminRouter.get('/reports/summary', async (req, res) => {
         DEUDA
       },
       unpaidReservations: Array.isArray(unpaidRows) ? unpaidRows : [],
-      upcomingEvents: Array.isArray(upcomingRows) ? upcomingRows : [],
       pendingPayments: Array.isArray(pendingPaymentsRows) ? pendingPaymentsRows : [],
       partialPayments: Array.isArray(partialPaymentsRows) ? partialPaymentsRows : []
     })

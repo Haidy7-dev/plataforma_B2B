@@ -287,7 +287,7 @@ export default function AdminUsers() {
             <div className="sa-panelHeader">
               <div>
                 <div className="sa-panelTitle">Gestión de usuarios</div>
-                <div className="sa-panelSub">Usuarios pertenecen a la misma empresa del ADMIN (id_empresa filtrado por backend).</div>
+                <div className="sa-panelSub">Usuarios pertenecen a la misma empresa.</div>
               </div>
 
               <button className="sa-btn sa-btnPrimary" onClick={openCreate} disabled={loading}>

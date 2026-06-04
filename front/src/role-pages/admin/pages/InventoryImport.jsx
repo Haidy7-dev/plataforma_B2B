@@ -238,7 +238,7 @@ export default function InventoryImport() {
               <div>
                 <div className="sa-panelTitle">Importación masiva CSV (ADMIN)</div>
                 <div className="sa-panelSub">
-                  Importa recursos CSV del módulo admin. Formato esperado por backend: nombre, tipo, stock, precio. (estado e id_empresa se completan automáticamente)
+                  Importa recursos CSV.
                 </div>
               </div>
               <Badge variant="info">id_empresa: {user?.id_empresa ?? '-'}</Badge>

@@ -25,7 +25,7 @@ function toneClassByFinancialStatus(status) {
   return 'sa-badge sa-badge-neutral'
 }
 
-/* toneClassByEventStatus removida: ya no se usa en “Próximos eventos” */
+
 
 export default function AdminDashboard() {
   const { user, token } = useAuth()
@@ -100,8 +100,8 @@ export default function AdminDashboard() {
           <div className="sa-panel">
             <div className="sa-panelHeader">
               <div>
-                <div className="sa-panelTitle">Dashboard</div>
-                <div className="sa-panelSub">Información real filtrada por id_empresa.</div>
+                <div className="sa-panelTitle">Inicio</div>
+                <div className="sa-panelSub">Información </div>
               </div>
               <div className="sa-badge sa-badge-info">id_empresa: {user?.id_empresa ?? '-'}</div>
             </div>
@@ -122,47 +122,6 @@ export default function AdminDashboard() {
               <div className="sa-kpi">
                 <div className="sa-kpiLabel">Pagos parciales</div>
                 <div className="sa-kpiValue">{loading ? '...' : stats.partialPayments}</div>
-              </div>
-            </div>
-
-            <div style={{ marginTop: 16 }}>
-              <div className="sa-panelTitle" style={{ marginBottom: 10 }}>Próximos eventos</div>
-              <div className="sa-tableWrap">
-                <table className="sa-table">
-                  <thead>
-                    <tr>
-                      <th>Fecha del Evento</th>
-                      <th>Espacio</th>
-                      <th>Estado de Pago</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {upcomingTop5.length ? upcomingTop5.map((row) => (
-                      <tr key={`up-${row.id_reserva}`}>
-                        <td>{formatDate(row.fecha_evento)}</td>
-                        <td>
-                          {row.cliente ? `${row.cliente} - ${row.espacio || '-'}` : (row.espacio || '-')}
-                        </td>
-                        <td>
-                          <div style={{ display: 'grid', gap: 4 }}>
-                            <span className={toneClassByFinancialStatus(row.estado_financiero)}>
-                              {row.estado_evento || row.estado_financiero || '-'}
-                            </span>
-                            {row.estado_financiero ? (
-                              <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 800 }}>
-                                {row.estado_financiero}
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    )) : (
-                      <tr>
-                        <td colSpan={3}><div className="sa-mutedBox">Sin próximos eventos.</div></td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
               </div>
             </div>
 

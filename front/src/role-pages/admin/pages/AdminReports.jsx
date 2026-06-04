@@ -21,15 +21,14 @@ export default function AdminReports() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [data, setData] = useState({
-    incidencias: 0,
-    cumplimiento: 0,
-    totalReservas: 0,
-    financieros: { PENDIENTE: 0, PARCIAL: 0, PAGADO: 0, DEUDA: 0 },
-    unpaidReservations: [],
-    upcomingEvents: [],
-    pendingPayments: [],
-    partialPayments: []
-  })
+  incidencias: 0,
+  cumplimiento: 0,
+  totalReservas: 0,
+  financieros: { PENDIENTE: 0, PARCIAL: 0, PAGADO: 0, DEUDA: 0 },
+  unpaidReservations: [],
+  pendingPayments: [],
+  partialPayments: []
+})
 
   useEffect(() => {
     if (!token) return
@@ -54,7 +53,6 @@ export default function AdminReports() {
             DEUDA: Number(res?.data?.financieros?.DEUDA || 0)
           },
           unpaidReservations: Array.isArray(res?.data?.unpaidReservations) ? res.data.unpaidReservations : [],
-          upcomingEvents: Array.isArray(res?.data?.upcomingEvents) ? res.data.upcomingEvents : [],
           pendingPayments: Array.isArray(res?.data?.pendingPayments) ? res.data.pendingPayments : [],
           partialPayments: Array.isArray(res?.data?.partialPayments) ? res.data.partialPayments : []
         })
@@ -108,18 +106,25 @@ export default function AdminReports() {
         headers: { Authorization: `Bearer ${token}` }
       })
       setData({
-        incidencias: Number(refreshed?.data?.incidencias || 0),
-        cumplimiento: Number(refreshed?.data?.cumplimiento || 0),
-        totalReservas: Number(refreshed?.data?.totalReservas || 0),
-        financieros: {
-          PENDIENTE: Number(refreshed?.data?.financieros?.PENDIENTE || 0),
-          PARCIAL: Number(refreshed?.data?.financieros?.PARCIAL || 0),
-          PAGADO: Number(refreshed?.data?.financieros?.PAGADO || 0),
-          DEUDA: Number(refreshed?.data?.financieros?.DEUDA || 0)
-        },
-        unpaidReservations: Array.isArray(refreshed?.data?.unpaidReservations) ? refreshed.data.unpaidReservations : [],
-        upcomingEvents: Array.isArray(refreshed?.data?.upcomingEvents) ? refreshed.data.upcomingEvents : []
-      })
+  incidencias: Number(refreshed?.data?.incidencias || 0),
+  cumplimiento: Number(refreshed?.data?.cumplimiento || 0),
+  totalReservas: Number(refreshed?.data?.totalReservas || 0),
+  financieros: {
+    PENDIENTE: Number(refreshed?.data?.financieros?.PENDIENTE || 0),
+    PARCIAL: Number(refreshed?.data?.financieros?.PARCIAL || 0),
+    PAGADO: Number(refreshed?.data?.financieros?.PAGADO || 0),
+    DEUDA: Number(refreshed?.data?.financieros?.DEUDA || 0)
+  },
+  unpaidReservations: Array.isArray(refreshed?.data?.unpaidReservations)
+    ? refreshed.data.unpaidReservations
+    : [],
+  pendingPayments: Array.isArray(refreshed?.data?.pendingPayments)
+    ? refreshed.data.pendingPayments
+    : [],
+  partialPayments: Array.isArray(refreshed?.data?.partialPayments)
+    ? refreshed.data.partialPayments
+    : []
+})
       setError('')
     } catch (e) {
       const status = e?.response?.status
@@ -282,42 +287,6 @@ export default function AdminReports() {
                     )) : (
                       <tr>
                         <td colSpan={3}><div className="sa-mutedBox">Sin pagos parciales.</div></td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div style={{ marginTop: 16 }}>
-              <div className="sa-panelTitle" style={{ marginBottom: 10 }}>Eventos próximos</div>
-              <div className="sa-tableWrap">
-                <table className="sa-table">
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Cliente</th>
-                      <th>Espacio</th>
-                      <th>Fecha</th>
-                      <th>Estado evento</th>
-                      <th>Estado financiero</th>
-                      <th>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(data.upcomingEvents || []).length ? data.upcomingEvents.map((row) => (
-                      <tr key={`upcoming-${row.id_reserva}`}>
-                        <td>{row.id_reserva}</td>
-                        <td>{row.cliente || '-'}</td>
-                        <td>{row.espacio || '-'}</td>
-                        <td>{formatDate(row.fecha_evento)}</td>
-                        <td>{row.estado_evento || '-'}</td>
-                        <td>{row.estado_financiero || '-'}</td>
-                        <td>{formatMoney(row.total)}</td>
-                      </tr>
-                    )) : (
-                      <tr>
-                        <td colSpan={7}><div className="sa-mutedBox">Sin eventos próximos.</div></td>
                       </tr>
                     )}
                   </tbody>
